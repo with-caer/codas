@@ -20,7 +20,7 @@ all-features = true
 crate-type = ["cdylib"]
 
 [dependencies]
-codas = { path = "../codas", features = [] }
+codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
 
 # Enable JS random number support.
 getrandom = { version = "*", features = ["js"] }

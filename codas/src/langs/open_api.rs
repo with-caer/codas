@@ -81,7 +81,7 @@ pub fn generate_spec(coda: &Coda, stream: &mut impl Writes) -> Result<(), Stream
         let _ = writeln!(writer, "      type: object");
 
         // Generate required field list.
-        if data_type.iter().find(|f| !f.optional).is_some() {
+        if data_type.iter().any(|f| !f.optional) {
             let _ = writeln!(writer, "      required:");
             for field in data_type.iter().filter(|f| !f.optional) {
                 let _ = writeln!(writer, "        {}:", field.name);
