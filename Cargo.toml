@@ -1,0 +1,69 @@
+# When releasing crates to crates.io,
+# please release all crates in this
+# workspace via `cargo-release`:
+# `cargo release --workspace`
+[workspace]
+resolver = "2"
+members = [ 
+    "codas",
+    "codas-flow",
+    "codas-macros",
+    "codas-web",
+]
+
+# Common configuration properties that
+# can be inherited by workspace members.
+[workspace.package]
+version = "0.4.2"
+edition = "2021"
+homepage = "https://www.codas.dev"
+repository = "https://github.com/with-caer/codas"
+readme = "README.md"
+license = "MIT"
+authors = [
+    "With Caer, LLC. <hi@caer.cc>",
+]
+
+[workspace.dependencies]
+# List all workspace members as
+# workspace-wide dependencies so
+# that they can be depended on by
+# any other workspace member.
+codas = { version = "0.4.2", path = "codas" }
+codas-macros = { version = "0.4.2", path = "codas-macros" }
+codas-flow = { version = "0.4.2", path = "codas-flow" }
+
+# Snafu is used for error handling instead
+# of Anyhow due to it's no-std support.
+snafu = { version = "0.8.2", default-features = false }
+
+# Serde is used for compatibility with other data formats.
+serde = { version = "1.0.218", features = ["derive"], default-features = false }
+
+# Tokio is used for running async tests.
+tokio = { version = "1.32.0", features = ["full"] }
+
+# Criterion is used for benchmarking.
+criterion = { version = "0.5.1", features = ["async_tokio", "html_reports"]}
+
+# Readable text asseritions for dev builds.
+pretty_assertions = { version= "1.4.0", default-features = false, features = ["alloc"] }
+
+[profile.dev]
+# Use release optimizations during testing to
+# speed up cryptography-based tests.
+opt-level = 3
+
+[profile.release]
+# Strip symbols from the binary
+# to further reduce size.
+strip = true
+
+# Enable link-time optimizations
+# to remove dead code.
+lto = true
+
+[profile.bench]
+strip = false
+lto = false
+debug = true

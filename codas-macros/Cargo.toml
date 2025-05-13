@@ -1,0 +1,42 @@
+[package]
+name = "codas-macros"
+description = "Macros for Codas."
+categories = [
+    "development-tools",
+]
+keywords = [
+    "codas", 
+    "macro",
+]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[package.metadata.release]
+release = true
+
+[package.metadata.docs.rs]
+# Generate documentation with all features enabled
+all-features = true
+
+[features]
+
+# Enable serde (de)serializers for generated code.
+serde = []
+
+[lib]
+proc-macro = true
+
+[dependencies]
+codas = { workspace = true, features = ["parse", "langs-rust"] }
+
+[dev-dependencies]
+codas = { path = "../codas", features = ["serde"] }
+codas-macros = { path = ".", features = ["serde"] }
+
+serde.workspace = true
+serde_json = "1.0.140"

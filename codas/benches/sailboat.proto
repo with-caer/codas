@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+message Sail {
+    float surface_area = 1;
+    uint32 sail_count = 2;
+    float breaking_strength = 3;
+    string surface_material = 4;
+    string rigging_material = 5;
+}
+
+message Hull {
+    string manufacturer_id = 1;
+    uint32 serial_number = 2;
+    string manufacture_year = 3;
+    string model_year = 4;
+    float length = 5;
+}
+
+message Boat {
+    string name = 1;
+    bool seaworthy = 2;
+    Sail sail = 3;
+    Hull hull = 4;
+}

@@ -1,0 +1,7 @@
+target/
+.idea/
+.vscode/
+.iml
+scratch.txt
+.DS_Store
+profile.json.gz

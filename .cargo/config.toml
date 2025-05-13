@@ -1,0 +1,12 @@
+[alias]
+
+# Alias to build docs without
+# building them for dependencies.
+docs = "doc --no-deps"
+
+[build]
+
+# Configure Rustdoc custom theming.
+rustdocflags = [
+    "--default-theme", "ayu",
+]

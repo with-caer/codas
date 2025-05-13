@@ -1,0 +1,49 @@
+[package]
+name = "codas-flow"
+description = "Low-latency, high-throughput bounded queues (\"data flows\") for (a)synchronous and event-driven systems."
+categories = [
+    "concurrency",
+    "embedded",
+    "network-programming", 
+    "no-std",
+]
+keywords = [
+    "codas", 
+    "lock-free", 
+    "ring-buffer", 
+    "event-driven", 
+    "actor"
+]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[package.metadata.release]
+release = true
+
+[package.metadata.docs.rs]
+# Generate documentation with all features enabled
+all-features = true
+
+[features]
+default = []
+
+[dependencies]
+codas.workspace = true
+snafu.workspace = true
+
+# no_std compatible atomics.
+portable-atomic = { version = "1.3", default-features = false, features = ["require-cas"] }
+portable-atomic-util = { version = "0.2.4", default-features = false, features = ["alloc"] }
+
+[dev-dependencies]
+tokio.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "channels"
+harness = false
