@@ -14,7 +14,7 @@ members = [
 # Common configuration properties that
 # can be inherited by workspace members.
 [workspace.package]
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 homepage = "https://www.codas.dev"
 repository = "https://github.com/with-caer/codas"
@@ -29,9 +29,9 @@ authors = [
 # workspace-wide dependencies so
 # that they can be depended on by
 # any other workspace member.
-codas = { version = "0.4.2", path = "codas" }
-codas-macros = { version = "0.4.2", path = "codas-macros" }
-codas-flow = { version = "0.4.2", path = "codas-flow" }
+codas = { version = "0.5.0", path = "codas" }
+codas-macros = { version = "0.5.0", path = "codas-macros" }
+codas-flow = { version = "0.5.0", path = "codas-flow" }
 
 # Snafu is used for error handling instead
 # of Anyhow due to it's no-std support.
