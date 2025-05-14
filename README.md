@@ -24,3 +24,9 @@ Refer to individual crates' READMEs for more detailed info.
 Copyright 2025 With Caer, LLC.
 
 Licensed under the MIT license. Refer to [the license file](LICENSE.txt) for more info.
+
+> _Note_: These crates were originally housed in
+> [GitLab under the Alicorn Systems organization](https://gitlab.com/alicorn/pub/alicorn)
+> and licensed under the AGPLv3. On May 12th, 2025, Alicorn Systems
+> transferred ownership of the Codas crates to With Caer, LLC, and
+> we've relicensed them under the MIT license.
