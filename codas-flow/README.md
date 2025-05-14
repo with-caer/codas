@@ -1,3 +1,6 @@
+[![`codas-flow` on crates.io](https://img.shields.io/crates/v/codas-flow)](https://crates.io/crates/codas-flow)
+[![`codas-flow` on docs.rs](https://img.shields.io/docsrs/codas-flow)](https://docs.rs/codas-flow/)
+
 Low-latency, high-throughput bounded queues ("data flows")
 for (a)synchronous and event-driven systems, inspired by the
 [LMAX Disruptor](https://github.com/LMAX-Exchange/disruptor)

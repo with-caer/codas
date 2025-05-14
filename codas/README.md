@@ -1,3 +1,6 @@
+[![`codas` on crates.io](https://img.shields.io/crates/v/codas)](https://crates.io/crates/codas)
+[![`codas` on docs.rs](https://img.shields.io/docsrs/codas)](https://docs.rs/codas/)
+
 Compact and streamable data format that
 works anywhere--from web apps to robots.
 

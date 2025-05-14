@@ -1,3 +1,6 @@
+[![`codas-macros` on crates.io](https://img.shields.io/crates/v/codas-macros)](https://crates.io/crates/codas-macros)
+[![`codas-macros` on docs.rs](https://img.shields.io/docsrs/codas-macros)](https://docs.rs/codas-macros/)
+
 Macros for generating Rust types from [Codas](https://crates.io/crates/codas).
 
 ## [`export_coda!`](macro@export_coda)
