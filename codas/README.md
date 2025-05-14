@@ -1,12 +1,9 @@
 [![`codas` on crates.io](https://img.shields.io/crates/v/codas)](https://crates.io/crates/codas)
 [![`codas` on docs.rs](https://img.shields.io/docsrs/codas)](https://docs.rs/codas/)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE.txt)
 
-Compact and streamable data format that
-works anywhere--from web apps to robots.
-
-If you're primarily using Codas with Rust, the easiest
-way to get started is via the
-[`codas-macros`](https://crates.io/crates/codas-macros) crate.
+Markdown-defined data that serialize to and from bytes
+on any platform—from web apps to robots!
 
 ## What's a Coda?
 
@@ -95,6 +92,16 @@ The _order_ of `Data` and their fields (`+`) matters: If
 data or fields are re-arranged, the binary encoding of that
 data may also change.
 
+## How do I use a Coda?
+
+The easiest way to get started with Codas is with Rust via
+the [`codas-macros`](https://crates.io/crates/codas-macros) crate;
+refer to its [`README`](../codas-macros/README.md) for some examples!
+
+### From Other Languages
+
+Try out the live code generator on [codas.dev](https://www.codas.dev)!
+
 ## Can I evolve or extend my Codas?
 
 Yes! Codas are designed to evolve as a system's
@@ -122,8 +129,21 @@ Decode | `110ns (9M/s)` | `118ns (8.5M/s)`
 > Comparative performance of different scenarios we've written
 > benchmarks for. Exact numbers will vary between platforms.
 
+## Related Crates
+
+- [`codas-macros`](https://crates.io/crates/codas-macros): Macros for
+  generating Rust data structures for any Coda.
+- [`codas-flow`](https://crates.io/crates/codas-flow): Low-latency,
+  high-throughput Bounded queues (\"data flows\") for (a)synchronous
+  and event-driven systems.
+
 ## License
 
-Copyright 2025 With Caer, LLC.
+Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
 
 Licensed under the MIT license. Refer to [the license file](../LICENSE.txt) for more info.
+
+> _Note_: Codas and their related Rust Crates were originally maintained
+> by [Alicorn Systems on GitLab](https://gitlab.com/alicorn/pub/alicorn).
+> On May 12th, 2025, Alicorn Systems transferred Codas and their related
+> Rust Crates to With Caer, and relicensed them under the MIT license.

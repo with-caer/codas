@@ -1,16 +1,15 @@
 [package]
 name = "codas"
-description = "Compact and streamable data format that works anywhere--from web apps to robots."
+description = "Markdown-defined data that serialize to and from bytes on any platform—from web apps to robots!"
 categories = [
-    "data-structures",
-    "embedded",
     "encoding",
     "network-programming", 
     "no-std",
 ]
 keywords = [
     "codas", 
-    "encoding", 
+    "encoding",
+    "markdown", 
     "protocol", 
     "serialization",
 ]

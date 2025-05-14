@@ -25,6 +25,6 @@ with any of the functions exported by [`lib.rs`](src/lib.rs).
 
 ## License
 
-Copyright 2025 With Caer, LLC.
+Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
 
 Licensed under the MIT license. Refer to [the license file](../LICENSE.txt) for more info.

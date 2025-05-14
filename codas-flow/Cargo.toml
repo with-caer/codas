@@ -3,7 +3,6 @@ name = "codas-flow"
 description = "Low-latency, high-throughput bounded queues (\"data flows\") for (a)synchronous and event-driven systems."
 categories = [
     "concurrency",
-    "embedded",
     "network-programming", 
     "no-std",
 ]

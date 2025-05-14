@@ -1,5 +1,6 @@
 [![`codas-flow` on crates.io](https://img.shields.io/crates/v/codas-flow)](https://crates.io/crates/codas-flow)
 [![`codas-flow` on docs.rs](https://img.shields.io/docsrs/codas-flow)](https://docs.rs/codas-flow/)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE.txt)
 
 Low-latency, high-throughput bounded queues ("data flows")
 for (a)synchronous and event-driven systems, inspired by the
@@ -158,6 +159,6 @@ Operation | `codas (flow)` | `codas (stage)` | `codas (stage w/ tokio-yield)` | 
 
 ## License
 
-Copyright 2025 With Caer, LLC.
+Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
 
 Licensed under the MIT license. Refer to [the license file](../LICENSE.txt) for more info.

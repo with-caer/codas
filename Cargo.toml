@@ -21,7 +21,8 @@ repository = "https://github.com/with-caer/codas"
 readme = "README.md"
 license = "MIT"
 authors = [
-    "With Caer, LLC. <hi@caer.cc>",
+    "With Caer, LLC <with@caer.cc>",
+    "Alicorn Systems, LLC",
 ]
 
 [workspace.dependencies]

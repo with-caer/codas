@@ -1,5 +1,6 @@
 [![`codas-macros` on crates.io](https://img.shields.io/crates/v/codas-macros)](https://crates.io/crates/codas-macros)
 [![`codas-macros` on docs.rs](https://img.shields.io/docsrs/codas-macros)](https://docs.rs/codas-macros/)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE.txt)
 
 Macros for generating Rust types from [Codas](https://crates.io/crates/codas).
 
@@ -57,6 +58,6 @@ assert_eq!("Hi!", match data {
 
 ## License
 
-Copyright 2025 With Caer, LLC.
+Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
 
 Licensed under the MIT license. Refer to [the license file](../LICENSE.txt) for more info.
