@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Usage: ./commit.sh [Commit Type] "my commit message"
+# Usage: ./.ops/commit.sh [Commit Type] "my commit message"
 #
 # Where [Commit Type] is one of:
 declare -a commitTypes=("feat" "docs" "fix" "ops")
@@ -8,10 +8,10 @@ declare -a commitTypes=("feat" "docs" "fix" "ops")
 # Check arguments.
 if [ "$#" -lt 2 ]; then
     echo "please provide a commit type and message. examples:\n"
-    echo "  ./commit.sh feat \"added a new feature\""
-    echo "  ./commit.sh docs \"edited some documentation\""
-    echo "  ./commit.sh fix \"fixed an issue\""
-    echo "  ./commit.sh ops \"improved the ci/cd pipeline\""
+    echo "  ./.ops/commit.sh feat \"added a new feature\""
+    echo "  ./.ops/commit.sh docs \"edited some documentation\""
+    echo "  ./.ops/commit.sh fix \"fixed an issue\""
+    echo "  ./.ops/commit.sh ops \"improved the ci/cd pipeline\""
     exit 1
 fi
 

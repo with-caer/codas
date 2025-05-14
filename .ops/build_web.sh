@@ -1,4 +1,6 @@
 #!/bin/sh
+#
+# Usage: ./ops/build_web.sh
 
 # Build WASM binaries.
 cargo build -p codas-web --release --target=wasm32-unknown-unknown
