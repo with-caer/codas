@@ -55,8 +55,9 @@ echo
 # Execute release if yes.
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    cargo release $releaseType --config ./.ops/release.toml --execute
-
+    # Normalize release dates.
+    UTC_DAY_BEGIN=$(TZ=0 date +%F)T00:00:00+0000
+    GIT_AUTHOR_DATE=$UTC_DAY_BEGIN GIT_COMMITTER_DATE=$UTC_DAY_BEGIN cargo release $releaseType --config ./.ops/release.toml --execute
 # Abort commit if no.
 else
     echo "release aborted"
