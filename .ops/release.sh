@@ -33,5 +33,20 @@ echo "installing release tooling..."
 cargo install -q cargo-release git-cliff
 echo "release tooling installed."
 
-# Run release.
+# Dry-run release.
+echo "beginning release dry-run..."
 cargo release $releaseType --config ./.ops/release.toml
+
+# Prompt for commit confirmation.
+read -p "execute release (y / N)? " -n 1 -r
+echo
+
+# Execute release if yes.
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    cargo release $releaseType --config ./.ops/release.toml --execute
+
+# Abort commit if no.
+else
+    echo "release aborted"
+fi
