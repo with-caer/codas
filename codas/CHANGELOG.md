@@ -1,5 +1,12 @@
 This file contains a chronological list of all major changes made to this crate.
 
+## Unreleased Changes
+
+### 🛡️ Operations
+
+- Regenerate changelogs during commits
+- Include current commit in auto-generated changelogs
+
 ## [0.5.1] - 2025-05-15
 
 ### 🚀 Features
