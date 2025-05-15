@@ -4,6 +4,9 @@
 #
 # Where [Release Type] is one of:
 declare -a releaseTypes=("patch" "minor" "major")
+#
+# This script will fail if any of the released crates
+# do not contain a preexisting CHANGELOG.md.
 
 # Check arguments.
 if [ "$#" -lt 1 ]; then

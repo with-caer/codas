@@ -33,6 +33,13 @@ fi
 # Normalize commit dates.
 UTC_DAY_BEGIN=$(TZ=0 date +%F)T00:00:00+0000 
 
+# Update changelogs.
+ls */Cargo.toml | while read; do
+    cd ${REPLY%/*}
+    git cliff --config ../.ops/git-cliff.toml -o CHANGELOG.md
+    cd ..
+done | sort -u
+
 # Stage all changes and show the staged changes to the user.
 git add --all .
 
