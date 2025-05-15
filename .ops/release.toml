@@ -8,4 +8,4 @@ tag-message = "ops: release {{crate_name}} version {{version}}"
 
 verify = false
 
-pre-release-hook = ["git", "cliff", "--config", "./.ops/git-cliff.toml", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]
+pre-release-hook = ["git", "cliff", "--config", "../.ops/git-cliff.toml", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]

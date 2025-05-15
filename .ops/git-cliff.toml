@@ -17,9 +17,8 @@ commit_parsers = [
 ]
 
 [changelog]
-
 header = """
-This file contains a chronological list of all major changes made to this workspace.\n
+This file contains a chronological list of all major changes made to this crate.\n
 """
 
 body = """
