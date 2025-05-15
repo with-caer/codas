@@ -42,8 +42,8 @@ echo "release tooling installed."
 # Dry-run release.
 echo "beginning release dry-run..."
 cargo release $releaseType --config ./.ops/release.toml
-echo "cleaning up dry-run changes..."
-git stash --include-untracked
+# echo "cleaning up dry-run changes..."
+# git stash --include-untracked
 
 # Prompt for commit confirmation.
 read -p "execute release (y / N)? " -n 1 -r
