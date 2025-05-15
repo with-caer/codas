@@ -33,11 +33,16 @@ fi
 # Normalize commit dates.
 UTC_DAY_BEGIN=$(TZ=0 date +%F)T00:00:00+0000 
 
-# Update changelogs.
+# Update changelogs for all crates.
 ls */Cargo.toml | while read; do
-    cd ${REPLY%/*}
-    git cliff --with-commit "${commitMessage}" --config ../.ops/git-cliff.toml -o CHANGELOG.md
-    cd ..
+    cratePath=${REPLY%/*}
+
+    # Only udpate changelogs for crate paths affected by this commit.
+    if [ ! -z "$(git status --porcelain ${cratePath})" ]; then
+        cd ${cratePath}
+        git cliff --with-commit "${commitMessage}" --config ../.ops/git-cliff.toml -o CHANGELOG.md
+        cd ..
+    fi
 done | sort -u
 
 # Stage all changes and show the staged changes to the user.
