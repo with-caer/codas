@@ -23,6 +23,12 @@ if [[ ! " ${releaseTypes[*]} " =~ [[:space:]]${releaseType}[[:space:]] ]]; then
     exit 1
 fi
 
+# Only allow releases on a clean working directory.
+if [ ! -z "$(git status --porcelain)" ]; then
+    echo "aborting release: uncommited changes present in repository"
+    exit 1
+fi
+
 # Verify workspace.
 cargo fmt --check
 cargo clippy
@@ -36,6 +42,8 @@ echo "release tooling installed."
 # Dry-run release.
 echo "beginning release dry-run..."
 cargo release $releaseType --config ./.ops/release.toml
+echo "cleaning up dry-run changes..."
+git stash --include-untracked
 
 # Prompt for commit confirmation.
 read -p "execute release (y / N)? " -n 1 -r
