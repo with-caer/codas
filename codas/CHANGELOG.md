@@ -1,6 +1,6 @@
 This file contains a chronological list of all major changes made to this crate.
 
-## Unreleased Changes
+## [0.5.1] - 2025-05-15
 
 ### 🚀 Features
 
@@ -10,6 +10,7 @@ This file contains a chronological list of all major changes made to this crate.
 
 - Publish to GitHub
 - Move ops scripts to sub-path and add release script
+- Add initial changelogs via git-cliff
 
 <!-- docs changed are collapsed by default -->
 <details><summary><h3 style="display:inline-block">📚 Documentation (Click to Expand)</h3></summary>

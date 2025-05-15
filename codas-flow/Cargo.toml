@@ -14,7 +14,7 @@ keywords = [
     "actor"
 ]
 readme = "README.md"
-version = "0.5.0"
+version = "0.5.1"
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
