@@ -36,7 +36,7 @@ snafu = { version = "0.8.2", default-features = false }
 serde = { version = "1.0.218", features = ["derive"], default-features = false }
 
 # Tokio is used for running async tests.
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 
 # Criterion is used for benchmarking.
 criterion = { version = "0.5.1", features = ["async_tokio", "html_reports"]}
