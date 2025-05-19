@@ -12,4 +12,4 @@ else
 fi
 
 # Build the packages.
-maturin build -m codas-web/Cargo.toml --features=python
+maturin build -m codas-cdylib/Cargo.toml --features=python

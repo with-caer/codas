@@ -1,6 +1,6 @@
 [package]
-name = "codas-web"
-description = "Web APIs for Codas."
+name = "codas-cdylib"
+description = "C-style dynamic libraries for Codas, providing support for languages/runtimes like Python and WASM."
 readme = "README.md"
 version = "0.5.0"
 edition.workspace = true

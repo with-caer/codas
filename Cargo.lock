@@ -289,6 +289,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "codas-cdylib"
+version = "0.5.0"
+dependencies = [
+ "codas",
+ "getrandom",
+ "js-sys",
+ "pyo3",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "codas-flow"
 version = "0.5.1"
 dependencies = [
@@ -308,17 +319,6 @@ dependencies = [
  "codas-macros",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "codas-web"
-version = "0.5.0"
-dependencies = [
- "codas",
- "getrandom",
- "js-sys",
- "pyo3",
- "wasm-bindgen",
 ]
 
 [[package]]

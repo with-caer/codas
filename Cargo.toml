@@ -2,9 +2,9 @@
 resolver = "2"
 members = [ 
     "codas",
+    "codas-cdylib",
     "codas-flow",
     "codas-macros",
-    "codas-web",
 ]
 
 # Common configuration properties that
