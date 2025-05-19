@@ -17,16 +17,20 @@ release = false
 all-features = true
 
 [lib]
+name = "codas"
 crate-type = ["cdylib"]
+
+[features]
+wasm = ["dep:getrandom", "dep:wasm-bindgen", "dep:js-sys"]
+python = ["dep:pyo3"]
 
 [dependencies]
 codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
 
-# Enable JS random number support.
-getrandom = { version = "*", features = ["js"] }
+# WASM-specific dependencies.
+wasm-bindgen = { version = "=0.2.100", optional = true }
+js-sys = { version = "=0.3.77", optional = true }
+getrandom = { version = "*", features = ["js"], optional = true }
 
-# WASM binding generation
-wasm-bindgen = "=0.2.100"
-
-# JavaScript interop.
-js-sys = "=0.3.77"
+# Python-specific dependencies.
+pyo3 = { version = "0.25.0", features = ["extension-module", "abi3", "macros"], optional = true }

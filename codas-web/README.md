@@ -1,27 +1,30 @@
-Web APIs for Codas.
+C-style dynamic libraries for Codas.
 
-## Getting Started
+## Building for: WASM
 
-First, run `build_web.sh` from the root of the repository to
-obtain the release artifacts (`codas_web.js` and `codas_web.wasm`),
-and copy these artifacts into your project.
+1. Run `./.ops/build_web.sh` from the root of the repository.
 
-Then, in your HTML, add:
+2. Copy `target/web/codas*` into your project.
 
-```html
-<script src="path/to/codas_web.js"></script>
-<script src="index.js" type="module"></script>
-```
+3. In your `index.html` (or similar), add:
 
-And in your `index.js` (or similar file), add:
+   ```html
+   <script src="path/to/codas_web.js"></script>
+   <script src="index.js" type="module"></script>
+   ```
 
-```js
-const { encrypt_str, decrypt_str } = wasm_bindgen;
-await wasm_bindgen('path/to/codas_web.wasm');
-```
+4. In your `index.js` (or similar), add:
 
-Replacing (or extending) `encrypt_str` and `decrypt_str`
-with any of the functions exported by [`lib.rs`](src/lib.rs).
+   ```js
+   const { * } = wasm_bindgen;
+   await wasm_bindgen('path/to/codas_web.wasm');
+   ```
+
+   Replacing `*` with any of the functions exported by [`lib.rs`](src/lib.rs).
+
+## Building for: Python
+
+1. Run `./.ops/build_python.sh` from the root of the repository.
 
 ## License
 

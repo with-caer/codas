@@ -54,7 +54,7 @@ pub fn test_codec_over_tcp() -> Result<(), CodecError> {
 
     // Create a TCP client connection to the listener
     // and send some encoded data.
-    let mut client = TcpStream::connect(format!("0.0.0.0:{listener_port}")).unwrap();
+    let mut client = TcpStream::connect(format!("127.0.0.1:{listener_port}")).unwrap();
     client.write_data(&request_data)?;
 
     // Decode the response.

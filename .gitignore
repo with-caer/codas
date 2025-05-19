@@ -5,3 +5,4 @@ target/
 scratch.txt
 .DS_Store
 profile.json.gz
+venv/

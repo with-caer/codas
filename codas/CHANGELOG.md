@@ -2,6 +2,10 @@ This file contains a chronological list of all major changes made to this crate.
 
 ## Unreleased Changes
 
+### 🚀 Features
+
+- Add python dylib generation for codas
+
 ### 🛡️ Operations
 
 - Regenerate changelogs during commits

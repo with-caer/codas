@@ -3,7 +3,7 @@
 # Usage: ./ops/build_web.sh
 
 # Build WASM binaries.
-cargo build -p codas-web --release --target=wasm32-unknown-unknown
+cargo build -p codas-web --release --target=wasm32-unknown-unknown --features=wasm
 
 # Generate WASM-JS shims.
 cargo install -q --root target/ --version 0.2.100 wasm-bindgen-cli

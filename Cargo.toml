@@ -33,7 +33,7 @@ codas-flow = { version = "0.5.1", path = "codas-flow" }
 snafu = { version = "0.8.2", default-features = false }
 
 # Serde is used for compatibility with other data formats.
-serde = { version = "1.0.218", features = ["derive"], default-features = false }
+serde = { version = "1.0.218", features = ["derive", "alloc"], default-features = false }
 
 # Tokio is used for running async tests.
 tokio = { version = "1.45.0", features = ["full"] }
