@@ -98,6 +98,20 @@ macro_rules! sized_byte_array {
             }
         }
 
+        impl core::convert::TryFrom<&[core::primitive::u8]> for $type_name {
+            type Error = &'static str;
+
+            fn try_from(bytes: &[core::primitive::u8]) -> Result<Self, Self::Error> {
+                if bytes.len() == $array_size {
+                    let mut this = Self::NULL;
+                    this.copy_from_slice(bytes);
+                    Ok(this)
+                } else {
+                    Err(stringify!(source bytes must be exactly $array_size long))
+                }
+            }
+        }
+
         impl core::convert::From<[core::primitive::u8; $array_size]> for $type_name {
             fn from(bytes: [core::primitive::u8; $array_size]) -> Self {
                 $type_name(bytes)

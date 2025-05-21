@@ -1,0 +1,31 @@
+[package]
+name = "codas-kit"
+description = "Toolkit for working with Codas and their data."
+categories = [
+    "development-tools",
+]
+keywords = [
+    "codas", 
+    "cli",
+]
+readme = "README.md"
+version = "0.0.1"
+authors = [
+    "With Caer, LLC <with@caer.cc>",
+]
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[package.metadata.release]
+release = false
+
+[package.metadata.docs.rs]
+# Generate documentation with all features enabled
+all-features = true
+
+[dependencies]
+codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
+
+clap = { version = "4.5.38", features = ["derive"] }

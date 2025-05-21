@@ -1,3 +1,5 @@
+> This crate is _unstable_ and experimental.
+
 C-style dynamic libraries for Codas.
 
 ## Building for: WASM
@@ -28,6 +30,6 @@ C-style dynamic libraries for Codas.
 
 ## License
 
-Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
+Copyright © 2025 With Caer, LLC.
 
 Licensed under the MIT license. Refer to [the license file](../LICENSE.txt) for more info.

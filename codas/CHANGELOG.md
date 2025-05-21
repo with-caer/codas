@@ -5,6 +5,7 @@ This file contains a chronological list of all major changes made to this crate.
 ### 🚀 Features
 
 - Add python dylib generation for codas
+- Add codas-kit, a crate for coda-related dev tools
 
 ### 🛡️ Operations
 

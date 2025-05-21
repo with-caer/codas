@@ -4,6 +4,7 @@ members = [
     "codas",
     "codas-cdylib",
     "codas-flow",
+    "codas-kit",
     "codas-macros",
 ]
 

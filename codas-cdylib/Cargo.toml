@@ -3,11 +3,13 @@ name = "codas-cdylib"
 description = "C-style dynamic libraries for Codas, providing support for languages/runtimes like Python and WASM."
 readme = "README.md"
 version = "0.5.0"
+authors = [
+    "With Caer, LLC <with@caer.cc>",
+]
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-authors.workspace = true
 
 [package.metadata.release]
 release = false
