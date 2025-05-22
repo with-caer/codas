@@ -4,7 +4,7 @@ C-style dynamic libraries for Codas.
 
 ## Building for: WASM
 
-1. Run `./.ops/build_web.sh` from the root of the repository.
+1. Run `./ops/build_web.sh` from the root of the repository.
 
 2. Copy `target/web/codas*` into your project.
 
@@ -26,7 +26,7 @@ C-style dynamic libraries for Codas.
 
 ## Building for: Python
 
-1. Run `./.ops/build_python.sh` from the root of the repository.
+1. Run `./ops/build_python.sh` from the root of the repository.
 
 ## License
 

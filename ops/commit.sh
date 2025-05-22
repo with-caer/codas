@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Usage: ./.ops/commit.sh [Commit Type] "my commit message"
+# Usage: ./ops/commit.sh [Commit Type] "my commit message"
 #
 # Where [Commit Type] is one of:
 declare -a commitTypes=("feat" "docs" "fix" "ops")
@@ -8,10 +8,10 @@ declare -a commitTypes=("feat" "docs" "fix" "ops")
 # Check arguments.
 if [ "$#" -lt 2 ]; then
     echo "please provide a commit type and message. examples:\n"
-    echo "  ./.ops/commit.sh feat \"added a new feature\""
-    echo "  ./.ops/commit.sh docs \"edited some documentation\""
-    echo "  ./.ops/commit.sh fix \"fixed an issue\""
-    echo "  ./.ops/commit.sh ops \"improved the ci/cd pipeline\""
+    echo "  ./ops/commit.sh feat \"added a new feature\""
+    echo "  ./ops/commit.sh docs \"edited some documentation\""
+    echo "  ./ops/commit.sh fix \"fixed an issue\""
+    echo "  ./ops/commit.sh ops \"improved the ci/cd pipeline\""
     exit 1
 fi
 
@@ -40,7 +40,7 @@ ls */Cargo.toml | while read; do
     # Only udpate changelogs for crate paths affected by this commit.
     if [ ! -z "$(git status --porcelain ${cratePath})" ]; then
         cd ${cratePath}
-        git cliff --with-commit "${commitMessage}" --config ../.ops/git-cliff.toml -o CHANGELOG.md
+        git cliff --with-commit "${commitMessage}" --config ../ops/git-cliff.toml -o CHANGELOG.md
         cd ..
     fi
 done | sort -u

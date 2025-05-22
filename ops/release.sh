@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Usage: ./.ops/release.sh [Release Type]
+# Usage: ./ops/release.sh [Release Type]
 #
 # Where [Release Type] is one of:
 declare -a releaseTypes=("patch" "minor" "major")
@@ -11,9 +11,9 @@ declare -a releaseTypes=("patch" "minor" "major")
 # Check arguments.
 if [ "$#" -lt 1 ]; then
     echo "please provide a release type. examples:\n"
-    echo "  ./.ops/release.sh patch"
-    echo "  ./.ops/release.sh minor"
-    echo "  ./.ops/release.sh major"
+    echo "  ./ops/release.sh patch"
+    echo "  ./ops/release.sh minor"
+    echo "  ./ops/release.sh major"
     exit 1
 fi
 
@@ -44,7 +44,7 @@ echo "release tooling installed."
 
 # Dry-run release.
 echo "beginning release dry-run..."
-cargo release $releaseType --config ./.ops/release.toml
+cargo release $releaseType --config ./ops/release.toml
 echo "cleaning up dry-run changes..."
 git stash
 
@@ -57,7 +57,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]
 then
     # Normalize release dates.
     UTC_DAY_BEGIN=$(TZ=0 date +%F)T00:00:00+0000
-    GIT_AUTHOR_DATE=$UTC_DAY_BEGIN GIT_COMMITTER_DATE=$UTC_DAY_BEGIN cargo release $releaseType --config ./.ops/release.toml --execute
+    GIT_AUTHOR_DATE=$UTC_DAY_BEGIN GIT_COMMITTER_DATE=$UTC_DAY_BEGIN cargo release $releaseType --config ./ops/release.toml --execute
 # Abort commit if no.
 else
     echo "release aborted"
