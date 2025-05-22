@@ -7,6 +7,7 @@ use std::{
 use clap::{Parser, Subcommand};
 
 pub mod cryptography;
+pub mod inspect;
 
 /// Command-line arguments for the `coda` terminal interface.
 #[derive(Parser, Debug)]
@@ -35,33 +36,41 @@ impl Args {
 #[command()]
 pub enum Command {
     /// Compile language-specific bindings for codas.
-    Compile {
-        /// The path to search for codas in.
-        ///
-        /// If unspecified, the current working directory is used.
-        #[arg(short, long, default_value_os_t = get_working_directory())]
-        source: PathBuf,
-
-        /// The path to output compiled code to.
-        ///
-        /// If unspecified, the `target` directory in
-        /// the current working directory is used.
-        #[arg(short, long, default_value_os_t = get_working_directory().join("target"))]
-        target: PathBuf,
-    },
+    Compile(CompileCommand),
 
     /// Inspect binary coda-encoded data.
-    Inspect {
-        /// Path to a file containing coda-encoded data.
-        ///
-        /// If unspecified, data will be read from standard input.
-        #[arg(short, long)]
-        source: Option<PathBuf>,
-    },
+    Inspect(InspectCommand),
 
     /// Cryptography-related utilities.
     #[command(subcommand)]
     Crypt(CryptographyCommand),
+}
+
+/// Arguments passed to [Command::Compile].
+#[derive(clap::Args, Debug, Clone)]
+pub struct CompileCommand {
+    /// The path to search for codas in.
+    ///
+    /// If unspecified, the current working directory is used.
+    #[arg(short, long, default_value_os_t = get_working_directory())]
+    source: PathBuf,
+
+    /// The path to output compiled code to.
+    ///
+    /// If unspecified, the `target` directory in
+    /// the current working directory is used.
+    #[arg(short, long, default_value_os_t = get_working_directory().join("target"))]
+    target: PathBuf,
+}
+
+/// Arguments passed to [Command::Inspect].
+#[derive(clap::Args, Debug, Clone)]
+pub struct InspectCommand {
+    /// Path to a file containing coda-encoded data.
+    ///
+    /// If unspecified, data will be read from standard input.
+    #[arg(short, long)]
+    source: Option<PathBuf>,
 }
 
 /// Subcommand passed to [Command::Crypt].

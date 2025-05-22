@@ -251,7 +251,7 @@ impl Encodable for DynamicListValue {
         let count = self.values.len() as FormatMetadata;
 
         // Apply the same formatting rules as the Vec codec.
-        let format = self.typing.format().as_data_format();
+        let format = Format::data(0).with(self.typing.format()).as_data_format();
         DataHeader { count, format }.encode(writer)
     }
 }
@@ -371,7 +371,6 @@ impl Decodable for DynamicListValue {
         self.values.clear();
 
         // Decode all elements.
-        // TODO: List values are assumed to _never_ be lists.
         let value = Dynamic::default(&self.typing);
         for _ in 0..count {
             let mut value = value.clone();
@@ -455,6 +454,10 @@ mod tests {
             text_list: vec!["one".into(), "two".into()],
             text: "hello".into(),
             nested: NestedTestData { boolean: true },
+            two_d: vec![
+                vec!["three".into(), "four".into()],
+                vec!["five".into(), "six".into()],
+            ],
         };
         let mut test_bytes_static = vec![];
         test_bytes_static.write_data(&test_data_static)?;
@@ -471,6 +474,16 @@ mod tests {
         let mut test_data_dynamic_nested = DynamicDataValue::new(&NestedTestData::typing());
         test_data_dynamic_nested.insert("boolean".into(), Dynamic::Bool(true));
         test_data_dynamic.insert("nested".into(), Dynamic::Data(test_data_dynamic_nested));
+        let mut test_data_dynamic_two_d = DynamicListValue::new(&Type::List(Type::Text.into()));
+        let mut test_data_dynamic_list_a = DynamicListValue::new(&Type::Text);
+        test_data_dynamic_list_a.push(Dynamic::Text("three".into()));
+        test_data_dynamic_list_a.push(Dynamic::Text("four".into()));
+        test_data_dynamic_two_d.push(Dynamic::List(test_data_dynamic_list_a));
+        let mut test_data_dynamic_list_b = DynamicListValue::new(&Type::Text);
+        test_data_dynamic_list_b.push(Dynamic::Text("five".into()));
+        test_data_dynamic_list_b.push(Dynamic::Text("six".into()));
+        test_data_dynamic_two_d.push(Dynamic::List(test_data_dynamic_list_b));
+        test_data_dynamic.insert("two_d".into(), Dynamic::List(test_data_dynamic_two_d));
         let mut test_bytes_dynamic = vec![];
         test_bytes_dynamic.write_data(&test_data_dynamic)?;
 

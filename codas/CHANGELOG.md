@@ -7,6 +7,10 @@ This file contains a chronological list of all major changes made to this crate.
 - Add python dylib generation for codas
 - Add codas-kit, a crate for coda-related dev tools
 
+### 🐛 Fixes
+
+- Encoding inconsistency for vectors, and add binary format inspector for codas
+
 ### 🛡️ Operations
 
 - Regenerate changelogs during commits

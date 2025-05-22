@@ -709,6 +709,7 @@ mod tests {
         pub text_list: Vec<Text>,
         pub text: Text,
         pub nested: NestedTestData,
+        pub two_d: Vec<Vec<Text>>,
     }
 
     impl TestData {
@@ -752,6 +753,13 @@ mod tests {
                     optional: false,
                     flattened: false,
                 },
+                DataField {
+                    name: Text::from("two_d"),
+                    docs: None,
+                    typing: Type::List(Type::List(Type::Text.into()).into()),
+                    optional: false,
+                    flattened: false,
+                },
             ];
 
             let typing = DataType::new(Text::from("Testdata"), None, 1, &blob_fields, &data_fields);
@@ -768,7 +776,8 @@ mod tests {
             .with(f64::FORMAT)
             .with(Vec::<Text>::FORMAT)
             .with(Text::FORMAT)
-            .with(NestedTestData::FORMAT);
+            .with(NestedTestData::FORMAT)
+            .with(Vec::<Vec<Text>>::FORMAT);
 
         fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
             writer.write_data(&self.number)?;
@@ -776,6 +785,7 @@ mod tests {
             writer.write_data(&self.text_list)?;
             writer.write_data(&self.text)?;
             writer.write_data(&self.nested)?;
+            writer.write_data(&self.two_d)?;
             Ok(())
         }
     }
@@ -793,6 +803,7 @@ mod tests {
             reader.read_data_into(&mut self.text_list)?;
             reader.read_data_into(&mut self.text)?;
             reader.read_data_into(&mut self.nested)?;
+            reader.read_data_into(&mut self.two_d)?;
 
             Ok(())
         }

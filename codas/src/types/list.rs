@@ -8,10 +8,9 @@ use crate::codec::{
 };
 
 impl Encodable for [u8] {
-    /// Encoded as a sequence of [`slice::len`]
-    /// [`Format::Data`], each containing a
-    /// single [`u8`] from the slice.
-    const FORMAT: Format = u8::FORMAT.as_data_format().as_format();
+    /// Encoded as a sequence of [`Format::Data`],
+    /// each containing a single [`u8`] from the slice.
+    const FORMAT: Format = Format::data(0).with(Format::Blob(1));
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         writer.write_all(self)?;
@@ -38,13 +37,11 @@ impl<T> Encodable for Vec<T>
 where
     T: Encodable + 'static,
 {
-    /// Encoded as a sequence of [`Vec::len`] [`Format::Data`]
-    /// containing `T`'s [`Encodable::FORMAT`].
+    /// Encoded as a sequence of [`Format::Data`], each
+    /// containing a single `T` from the vector.
     ///
-    /// The encoding format of vectors is linked to the
-    /// format of \[[`u8`]\]s: A `vec![1337u8]` and
-    /// `&[1337u8]` should have identical encodings.
-    const FORMAT: Format = T::FORMAT.as_data_format().as_format();
+    /// A `Vec<u8>` has the same encoding as a `[u8]`.
+    const FORMAT: Format = Format::data(0).with(T::FORMAT);
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         for item in self {
@@ -106,12 +103,15 @@ where
 #[cfg(test)]
 mod test {
     use crate::{
-        codec::{ReadsDecodable, WritesEncodable},
+        codec::{Encodable, Format, ReadsDecodable, WritesEncodable},
         types::Text,
     };
 
     #[test]
     fn codes_u8_slices() {
+        assert_eq!(<[u8]>::FORMAT, <Vec<u8>>::FORMAT);
+        assert_eq!(Format::data(0).with(Format::Blob(1)), <Vec<u8>>::FORMAT);
+
         let value = &[8u8, 3, 7][..];
         let mut encoded = vec![];
         encoded.write_data(value).expect("encoded");
@@ -121,6 +121,8 @@ mod test {
 
     #[test]
     fn codes_unstructured_vecs() {
+        assert_eq!(Format::data(0).with(Format::Blob(4)), <Vec<u32>>::FORMAT);
+
         let value = vec![7u32, 8, 9];
         let mut encoded = vec![];
         encoded.write_data(&value).expect("encoded");
@@ -130,6 +132,11 @@ mod test {
 
     #[test]
     fn codes_structured_vecs() {
+        assert_eq!(
+            Format::data(0).with(Format::data(0).with(Format::Blob(1))),
+            <Vec<Text>>::FORMAT
+        );
+
         let value = vec![Text::from("Hello, world!")];
         let mut encoded = vec![];
         encoded.write_data(&value).expect("encoded");

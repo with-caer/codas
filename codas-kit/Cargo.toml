@@ -25,7 +25,13 @@ release = false
 # Generate documentation with all features enabled
 all-features = true
 
+[[bin]]
+name = "coda"
+path = "src/main.rs"
+
 [dependencies]
 codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
+codas-macros.workspace = true
+serde.workspace = true
 
 clap = { version = "4.5.38", features = ["derive"] }
