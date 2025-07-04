@@ -16,5 +16,7 @@ pub mod python;
 #[cfg(any(feature = "langs-rust", test))]
 pub mod rust;
 
+#[cfg(any(feature = "langs-sql", test))]
+pub mod sql;
 #[cfg(any(feature = "langs-typescript", test))]
 pub mod typescript;
