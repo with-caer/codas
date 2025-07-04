@@ -17,6 +17,10 @@ This file contains a chronological list of all major changes made to this crate.
 - Regenerate changelogs during commits
 - Include current commit in auto-generated changelogs
 
+### 📚 Documentation
+
+- Add DeepWiki badge
+
 ## [0.5.1] - 2025-05-15
 
 ### 🚀 Features

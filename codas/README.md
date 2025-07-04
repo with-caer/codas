@@ -1,6 +1,7 @@
 [![`codas` on crates.io](https://img.shields.io/crates/v/codas)](https://crates.io/crates/codas)
 [![`codas` on docs.rs](https://img.shields.io/docsrs/codas)](https://docs.rs/codas/)
 [![`codas` is MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/with-caer/codas/blob/main/LICENSE.txt)
+[![Ask DeepWiki about `codas`](https://deepwiki.com/badge.svg)](https://deepwiki.com/with-caer/codas)
 
 Markdown-defined data that serialize to and from bytes
 on any platform—from web apps to robots!
