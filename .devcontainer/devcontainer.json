@@ -1,20 +1,3 @@
 {
-    "build": {
-        "dockerfile": "./Dockerfile",
-        "context": "."
-    },
-    
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "rust-lang.rust-analyzer",
-                "tamasfe.even-better-toml"
-            ],
-            "settings": {
-                "files.watcherExclude": {
-                    "**/target/**": true
-                }
-            }
-        }
-    }
+    "image": "ghcr.io/with-caer/owc/workbench:latest"
 }
