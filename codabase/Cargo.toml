@@ -27,7 +27,7 @@ release = true
 all-features = true
 
 [dependencies]
-codas = { path = "../codas", features = ["std", "parse", "langs-open-api", "langs-python", "langs-rust", "langs-sql", "langs-typescript"] }
+codas = { workspace = true, features = ["std", "parse", "langs-open-api", "langs-python", "langs-rust", "langs-sql", "langs-typescript"] }
 codas-macros.workspace = true
 serde.workspace = true
 
