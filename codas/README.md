@@ -1,6 +1,6 @@
 [![`codas` on crates.io](https://img.shields.io/crates/v/codas)](https://crates.io/crates/codas)
 [![`codas` on docs.rs](https://img.shields.io/docsrs/codas)](https://docs.rs/codas/)
-[![`codas` is MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/with-caer/codas/blob/main/LICENSE.txt)
+[![`codas` is MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/withcaer/codas/blob/main/LICENSE.txt)
 
 Markdown-defined data that serialize to and from bytes
 on any platform—from web apps to robots!
@@ -119,7 +119,7 @@ Conversely, if a system receives data that's _missing_
 newly-added fields, the missing fields will be gracefully
 populated with default values.
 
-## Relative Performance [("Benchmarks")](https://github.com/with-caer/codas/blob/main/codas/benches/codecs.rs)
+## Relative Performance [("Benchmarks")](https://github.com/withcaer/codas/blob/main/codas/benches/codecs.rs)
 
 Operation | `codas` | `prost (proto3)`
 --|--|--
@@ -141,7 +141,7 @@ Decode | `110ns (9M/s)` | `118ns (8.5M/s)`
 
 Copyright © 2024 - 2026 With Caer, LLC and Alicorn Systems, LLC.
 
-Unless otherwise specified, the crates in this repository are licensed under the MIT license. Refer to [the license file](https://github.com/with-caer/codas/blob/main/LICENSE.txt) for more info.
+Unless otherwise specified, the crates in this repository are licensed under the MIT license. Refer to [the license file](https://github.com/withcaer/codas/blob/main/LICENSE.txt) for more info.
 
 > _Note_: Codas and their related Rust Crates were originally maintained
 > by [Alicorn Systems on GitLab](https://gitlab.com/alicorn/pub/alicorn).
