@@ -1,20 +1,19 @@
 [package]
 name = "codabase"
-description = "The Codabase development platform."
+description = "Polyglot development tool for markdown-defined data types."
 categories = [
     "development-tools",
 ]
 keywords = [
-    "codabase",
-    "codas", 
     "cli",
+    "codas", 
+    "markdown",
+    "serialization",
 ]
 readme = "README.md"
 license = "FSL-1.1-MIT"
 version = "0.0.0"
-authors = [
-    "With Caer, LLC <with@caer.cc>",
-]
+authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true

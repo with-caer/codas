@@ -13,11 +13,9 @@ members = [
 [workspace.package]
 edition = "2021"
 homepage = "https://www.codas.dev"
-repository = "https://github.com/with-caer/codas"
-license = "MIT"
+repository = "https://github.com/withcaer/codas"
 authors = [
     "With Caer, LLC <with@caer.cc>",
-    "Alicorn Systems, LLC",
 ]
 
 [workspace.dependencies]

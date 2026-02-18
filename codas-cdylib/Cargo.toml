@@ -2,14 +2,12 @@
 name = "codas-cdylib"
 description = "C-style dynamic libraries for Codas, providing support for languages/runtimes like Python and WASM."
 readme = "README.md"
+license = "MIT"
 version = "0.5.0"
-authors = [
-    "With Caer, LLC <with@caer.cc>",
-]
+authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-license.workspace = true
 
 [package.metadata.release]
 release = false
@@ -27,7 +25,7 @@ wasm = ["dep:getrandom", "dep:wasm-bindgen", "dep:js-sys"]
 python = ["dep:pyo3"]
 
 [dependencies]
-codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
+codas = { workspace = true, features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
 
 # WASM-specific dependencies.
 wasm-bindgen = { version = "=0.2.100", optional = true }
