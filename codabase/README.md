@@ -1,5 +1,4 @@
-[![`codabase` on crates.io](https://img.shields.io/crates/v/codabase)](https://crates.io/crates/codas)
-[![`codabase` on docs.rs](https://img.shields.io/docsrs/codabase)](https://docs.rs/codas/)
+[![`codabase` on crates.io](https://img.shields.io/crates/v/codabase)](https://crates.io/crates/codabase)
 [![`codabase` is FSL-1.1-MIT licensed](https://img.shields.io/badge/license-FSL--1.1--MIT-yellow.svg)](LICENSE.md)
 
 The Codabase development platform.
