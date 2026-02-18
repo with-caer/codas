@@ -215,7 +215,7 @@ pub fn fixed_bytes_from_hex<const SIZE: usize>(
     bytes: &mut [u8; SIZE],
 ) -> Result<(), BinaryError> {
     let length = hex.len();
-    if length % 2 != 0 {
+    if !length.is_multiple_of(2) {
         return Err(BinaryError::UnevenHex { actual: length });
     } else if length / 2 != SIZE {
         return Err(BinaryError::WrongHexLength {
@@ -259,7 +259,7 @@ pub fn fixed_bytes_from_hex<const SIZE: usize>(
 /// Decodes a vector of bytes from a `hex`.
 pub fn bytes_from_hex(hex: &str) -> Result<alloc::vec::Vec<u8>, BinaryError> {
     let length = hex.len();
-    if length % 2 != 0 {
+    if !length.is_multiple_of(2) {
         return Err(BinaryError::UnevenHex { actual: length });
     }
 
@@ -335,7 +335,7 @@ pub fn format_bytes_as_hex(fmt: &mut Formatter, bytes: &[u8]) -> Result<(), core
 ///
 /// With a specific focus on supporting _only_ the `Crockford` variant of Base32.
 pub fn base32_from_bytes(bytes: &[u8]) -> Text {
-    let mut base32 = alloc::vec::Vec::with_capacity((bytes.len() + 3) / 4 * BASE32_BITS_PER_CHAR);
+    let mut base32 = alloc::vec::Vec::with_capacity(bytes.len().div_ceil(4) * BASE32_BITS_PER_CHAR);
 
     for chunk in bytes.chunks(BASE32_BITS_PER_CHAR) {
         // Compress the chunks into a number (40 bits).
@@ -353,7 +353,7 @@ pub fn base32_from_bytes(bytes: &[u8]) -> Text {
     }
 
     // Trim padding characters.
-    if bytes.len() % BASE32_BITS_PER_CHAR != 0 {
+    if !bytes.len().is_multiple_of(BASE32_BITS_PER_CHAR) {
         let len = base32.len();
         let num_extra = 8 - (bytes.len() % BASE32_BITS_PER_CHAR * 8 + 4) / BASE32_BITS_PER_CHAR;
         base32.truncate(len - num_extra);

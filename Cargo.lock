@@ -328,6 +328,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
+name = "codabase"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "codas",
+ "codas-macros",
+ "serde",
+]
+
+[[package]]
 name = "codas"
 version = "0.5.1"
 dependencies = [
@@ -368,16 +378,6 @@ dependencies = [
  "portable-atomic-util",
  "snafu",
  "tokio",
-]
-
-[[package]]
-name = "codas-kit"
-version = "0.0.1"
-dependencies = [
- "clap",
- "codas",
- "codas-macros",
- "serde",
 ]
 
 [[package]]

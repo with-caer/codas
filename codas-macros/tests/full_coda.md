@@ -20,3 +20,4 @@ each of the built-in data types.
 + `listing` list of text
 + `mapping` map of text to f32
 + `optional_message` optional text
++ `request_data` map of text to unspecified

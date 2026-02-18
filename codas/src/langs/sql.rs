@@ -5,7 +5,7 @@
 
 use core::fmt::Write;
 
-use alloc::format;
+use alloc::{format, string::String};
 
 use indoc::writedoc;
 
@@ -68,6 +68,7 @@ pub fn generate_types(coda: &Coda, stream: &mut impl Writes) -> Result<(), Strea
 /// Returns the native SQL identifier of a type.
 fn duckdb_type(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("BLOB"),
         Type::U8 => Text::Static("UTINYINT"),
         Type::U16 => Text::Static("USMALLINT"),
         Type::U32 => Text::Static("UINTEGER"),
@@ -125,7 +126,8 @@ CREATE TYPE MyDataType AS STRUCT (
   "textual_field" VARCHAR,
   "nested_field" MyNestedDataType,
   "3d_field" INTEGER[][][],
-  "map_field" MAP(VARCHAR, INTEGER)
+  "map_field" MAP(VARCHAR, INTEGER),
+  "unspecified_field" BLOB
 );"#
             .trim(),
             sql.trim()

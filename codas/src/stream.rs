@@ -127,6 +127,16 @@ pub trait Writes {
 }
 
 /// [`core::fmt::Write`] wrapper for any [`Writes`].
+#[cfg_attr(
+    not(any(
+        feature = "langs-python",
+        feature = "langs-sql",
+        feature = "langs-typescript",
+        feature = "langs-open-api",
+        test
+    )),
+    allow(dead_code)
+)]
 pub(crate) struct FmtWriter<'w, W: Writes> {
     writes: &'w mut W,
 }

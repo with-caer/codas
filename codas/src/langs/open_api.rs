@@ -84,7 +84,7 @@ pub fn generate_spec(coda: &Coda, stream: &mut impl Writes) -> Result<(), Stream
         if data_type.iter().any(|f| !f.optional) {
             let _ = writeln!(writer, "      required:");
             for field in data_type.iter().filter(|f| !f.optional) {
-                let _ = writeln!(writer, "        {}:", field.name);
+                let _ = writeln!(writer, "        - {}", field.name);
             }
         }
 
@@ -147,6 +147,7 @@ pub fn generate_spec(coda: &Coda, stream: &mut impl Writes) -> Result<(), Stream
 /// native Typescript identifier.
 fn open_api_type(typing: &Type) -> OpenApiTypeIdentifier {
     match typing {
+        Type::Unspecified => OpenApiTypeIdentifier::Unformatted(Text::Static("object")),
         Type::U8 => OpenApiTypeIdentifier::Unformatted(Text::Static("integer")),
         Type::U16 => OpenApiTypeIdentifier::Unformatted(Text::Static("integer")),
         Type::U32 => OpenApiTypeIdentifier::Unformatted(Text::Static("integer")),

@@ -1,5 +1,5 @@
 use clap::Parser;
-use codas_kit::args::Args;
+use codabase::args::Args;
 
 fn main() {
     let args = Args::parse();

@@ -1,7 +1,6 @@
 [![`codas` on crates.io](https://img.shields.io/crates/v/codas)](https://crates.io/crates/codas)
 [![`codas` on docs.rs](https://img.shields.io/docsrs/codas)](https://docs.rs/codas/)
 [![`codas` is MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/with-caer/codas/blob/main/LICENSE.txt)
-[![Ask DeepWiki about `codas`](https://deepwiki.com/badge.svg)](https://deepwiki.com/with-caer/codas)
 
 Markdown-defined data that serialize to and from bytes
 on any platform—from web apps to robots!
@@ -140,11 +139,11 @@ Decode | `110ns (9M/s)` | `118ns (8.5M/s)`
 
 ## License
 
-Copyright © 2024—2025 With Caer, LLC and Alicorn Systems, LLC.
+Copyright © 2024 - 2026 With Caer, LLC and Alicorn Systems, LLC.
 
-Licensed under the MIT license. Refer to [the license file](https://github.com/with-caer/codas/blob/main/LICENSE.txt) for more info.
+Unless otherwise specified, the crates in this repository are licensed under the MIT license. Refer to [the license file](https://github.com/with-caer/codas/blob/main/LICENSE.txt) for more info.
 
 > _Note_: Codas and their related Rust Crates were originally maintained
 > by [Alicorn Systems on GitLab](https://gitlab.com/alicorn/pub/alicorn).
-> On May 12th, 2025, Alicorn Systems transferred Codas and their related
-> Rust Crates to With Caer, and relicensed them under the MIT license.
+> On May 12th, 2025, Alicorn Systems, Inc. transferred Codas and their related
+> Rust Crates to With Caer, LLC.

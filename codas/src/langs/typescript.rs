@@ -89,7 +89,7 @@ pub fn generate_types(coda: &Coda, stream: &mut impl Writes) -> Result<(), Strea
     for (ordinal, data_type) in coda.iter().enumerate() {
         let ordinal = ordinal + 1;
         let data_type_name = &data_type.name;
-        let _ = writeln!(writer, "            case {ordinal}: return matcher.{data_type_name} ? matcher.{data_type_name}(data) : matcher.Unspecified();");
+        let _ = writeln!(writer, "            case {ordinal}: return matcher.{data_type_name} ? matcher.{data_type_name}(data as {data_type_name}) : matcher.Unspecified();");
     }
     let _ = writeln!(writer, "            default: return matcher.Unspecified();");
     let _ = writeln!(writer, "        }}");
@@ -230,6 +230,7 @@ fn write_indentation<W: Writes>(
 /// Returns the Typescript literal of `type`'s default value.
 fn typescript_default_val(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("undefined"),
         Type::U8 => Text::Static("0"),
         Type::U16 => Text::Static("0"),
         Type::U32 => Text::Static("0"),
@@ -247,7 +248,7 @@ fn typescript_default_val(typing: &Type) -> Text {
             format!("new {name}()").into()
         }
         Type::List(_) => Text::Static("[]"),
-        Type::Map(_) => Text::Static("{}"),
+        Type::Map(_) => Text::Static("new Map()"),
     }
 }
 
@@ -258,6 +259,7 @@ fn typescript_default_val(typing: &Type) -> Text {
 /// native Typescript identifier.
 fn typescript_type(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("unknown"),
         Type::U8 => Text::Static("number"),
         Type::U16 => Text::Static("number"),
         Type::U32 => Text::Static("number"),

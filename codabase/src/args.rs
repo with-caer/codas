@@ -4,12 +4,13 @@ use std::{
     path::PathBuf,
 };
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
+pub mod compile;
 pub mod cryptography;
 pub mod inspect;
 
-/// Command-line arguments for the `coda` terminal interface.
+/// Command-line arguments for the `codabase` terminal interface.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -22,10 +23,10 @@ impl Args {
     /// Execute the subcommand in these arguments.
     pub fn execute(self) {
         match self.command {
-            Command::Compile { .. } => todo!(),
-            Command::Inspect { .. } => todo!(),
-            Command::Crypt(cryptography_command) => {
-                cryptography::execute_cryptography_command(cryptography_command);
+            Command::Compile(cmd) => compile::execute_compile_command(cmd),
+            Command::Inspect(cmd) => inspect::execute_inspect_command(cmd),
+            Command::Crypt(cmd) => {
+                cryptography::execute_cryptography_command(cmd);
             }
         }
     }
@@ -49,18 +50,37 @@ pub enum Command {
 /// Arguments passed to [Command::Compile].
 #[derive(clap::Args, Debug, Clone)]
 pub struct CompileCommand {
-    /// The path to search for codas in.
+    /// Path to a coda markdown file, or a directory
+    /// of coda files.
     ///
-    /// If unspecified, the current working directory is used.
-    #[arg(short, long, default_value_os_t = get_working_directory())]
-    source: PathBuf,
+    /// If unspecified, coda markdown will be read
+    /// from standard input.
+    #[arg(short, long)]
+    source: Option<PathBuf>,
 
-    /// The path to output compiled code to.
+    /// Output directory for compiled files.
     ///
-    /// If unspecified, the `target` directory in
-    /// the current working directory is used.
+    /// Only used in batch mode (when `--lang` is not set).
     #[arg(short, long, default_value_os_t = get_working_directory().join("target"))]
     target: PathBuf,
+
+    /// Target language to compile to.
+    ///
+    /// When set, compiles a single coda and writes the
+    /// output to standard output. When unset, compiles
+    /// all codas in `--source` to all languages in `--target`.
+    #[arg(short, long)]
+    lang: Option<Lang>,
+}
+
+/// Supported target languages for code generation.
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum Lang {
+    Rust,
+    Python,
+    Typescript,
+    OpenApi,
+    Sql,
 }
 
 /// Arguments passed to [Command::Inspect].
@@ -116,7 +136,7 @@ fn get_working_directory() -> PathBuf {
     std::env::current_dir().unwrap()
 }
 
-/// Opens the contents of the file at `path` for reading
+/// Opens the contents of the file at `path` for reading.
 ///
 /// Iff `path` is `None`, the contents of standard
 /// input will be opened for reading until there is

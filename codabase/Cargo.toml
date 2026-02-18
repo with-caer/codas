@@ -1,14 +1,16 @@
 [package]
-name = "codas-kit"
-description = "Toolkit for working with Codas and their data."
+name = "codabase"
+description = "The Codabase development platform."
 categories = [
     "development-tools",
 ]
 keywords = [
+    "codabase",
     "codas", 
     "cli",
 ]
 readme = "README.md"
+license = "FSL-1.1-MIT"
 version = "0.0.1"
 authors = [
     "With Caer, LLC <with@caer.cc>",
@@ -16,21 +18,16 @@ authors = [
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-license.workspace = true
 
 [package.metadata.release]
-release = false
+release = true
 
 [package.metadata.docs.rs]
 # Generate documentation with all features enabled
 all-features = true
 
-[[bin]]
-name = "coda"
-path = "src/main.rs"
-
 [dependencies]
-codas = { path = "../codas", features = ["parse", "langs-open-api", "langs-python", "langs-rust", "langs-typescript"] }
+codas = { path = "../codas", features = ["std", "parse", "langs-open-api", "langs-python", "langs-rust", "langs-sql", "langs-typescript"] }
 codas-macros.workspace = true
 serde.workspace = true
 

@@ -10,9 +10,24 @@ use crate::{
 
 use super::Text;
 
-/// Dynamic value of some [`Type`].
-#[derive(Debug, Clone, PartialEq)]
-pub enum Dynamic {
+/// A value whose type is not specified.
+///
+/// Every coda has an `Unspecified` data type
+/// with ordinal `0`. Data of this type is used
+/// as the default data for every coda.
+///
+/// The exact _contents_ of this data are
+/// entirely unspecified; they could be "null"
+/// or empty (the most common case), or could
+/// contain an undocumented sequence of data.
+/// That's why we call this type `Unspecified`
+/// instead of something like `Null` or `Void`.
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum Unspecified {
+    /// No value.
+    #[default]
+    None,
+
     U8(u8),
     I8(i8),
     U16(u16),
@@ -36,34 +51,41 @@ pub enum Dynamic {
     Map(DynamicMapValue),
 }
 
-impl Dynamic {
+impl Unspecified {
+    /// Constant [`DataType`] for unspecified data.
+    pub const DATA_TYPE: DataType = DataType::new_fluid(
+        Text::from("Unspecified"),
+        Some(Text::from("Unspecified data.")),
+    );
+
     /// Returns the default value of a `typing`.
-    pub fn default(typing: &Type) -> Dynamic {
+    pub fn default_of(typing: &Type) -> Unspecified {
         match typing {
-            Type::U8 => Dynamic::U8(0),
-            Type::I8 => Dynamic::I8(0),
-            Type::U16 => Dynamic::U16(0),
-            Type::I16 => Dynamic::I16(0),
-            Type::U32 => Dynamic::U32(0),
-            Type::I32 => Dynamic::I32(0),
-            Type::U64 => Dynamic::U64(0),
-            Type::I64 => Dynamic::I64(0),
-            Type::F32 => Dynamic::F32(0.0),
-            Type::F64 => Dynamic::F64(0.0),
-            Type::Bool => Dynamic::Bool(false),
-            Type::Text => Dynamic::Text(Text::default()),
-            Type::Data(typing) => Dynamic::Data(DynamicDataValue::new(typing)),
-            Type::List(typing) => Dynamic::List(DynamicListValue::new(typing)),
-            Type::Map(typing) => Dynamic::Map(DynamicMapValue::new(typing)),
+            Type::Unspecified => Unspecified::None,
+            Type::U8 => Unspecified::U8(0),
+            Type::I8 => Unspecified::I8(0),
+            Type::U16 => Unspecified::U16(0),
+            Type::I16 => Unspecified::I16(0),
+            Type::U32 => Unspecified::U32(0),
+            Type::I32 => Unspecified::I32(0),
+            Type::U64 => Unspecified::U64(0),
+            Type::I64 => Unspecified::I64(0),
+            Type::F32 => Unspecified::F32(0.0),
+            Type::F64 => Unspecified::F64(0.0),
+            Type::Bool => Unspecified::Bool(false),
+            Type::Text => Unspecified::Text(Text::default()),
+            Type::Data(typing) => Unspecified::Data(DynamicDataValue::new(typing)),
+            Type::List(typing) => Unspecified::List(DynamicListValue::new(typing)),
+            Type::Map(typing) => Unspecified::Map(DynamicMapValue::new(typing)),
         }
     }
 }
 
-/// Contents of a [`Dynamic::Data`].
+/// Contents of an [`Unspecified::Data`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct DynamicDataValue {
     typing: Arc<DataType>,
-    fields: Option<BTreeMap<Text, Dynamic>>,
+    fields: Option<BTreeMap<Text, Unspecified>>,
 }
 
 impl DynamicDataValue {
@@ -84,7 +106,7 @@ impl DynamicDataValue {
     }
 
     /// Inserts a `value` for the field with `name`.
-    pub fn insert(&mut self, name: Text, value: Dynamic) {
+    pub fn insert(&mut self, name: Text, value: Unspecified) {
         let fields = self.fields.get_or_insert_with(Default::default);
         fields.insert(name, value);
     }
@@ -93,7 +115,7 @@ impl DynamicDataValue {
     ///
     /// The iterator yields fields in order by ordinal,
     /// yielding `None` for unset fields.
-    pub fn iter(&self) -> impl Iterator<Item = (&DataField, Option<&Dynamic>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&DataField, Option<&Unspecified>)> {
         self.typing
             .iter()
             .map(|field| (field, self.fields.as_ref().and_then(|f| f.get(&field.name))))
@@ -104,23 +126,23 @@ impl DynamicDataValue {
     /// Fields are visited in order by ordinal. If
     /// a field is unset, it will be initialized to
     /// a default value before `proc` is invoked.
-    pub fn visit_mut(&mut self, mut proc: impl FnMut(&DataField, &mut Dynamic)) {
+    pub fn visit_mut(&mut self, mut proc: impl FnMut(&DataField, &mut Unspecified)) {
         let fields = self.fields.get_or_insert_with(Default::default);
         for field in self.typing.iter() {
             let value = fields
                 .entry(field.name.clone())
-                .or_insert_with(|| Dynamic::default(&field.typing));
+                .or_insert_with(|| Unspecified::default_of(&field.typing));
 
             proc(field, value);
         }
     }
 }
 
-/// Contents of a [`Dynamic::List`].
+/// Contents of an [`Unspecified::List`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct DynamicListValue {
     typing: Arc<Type>,
-    values: alloc::vec::Vec<Dynamic>,
+    values: alloc::vec::Vec<Unspecified>,
 }
 
 impl DynamicListValue {
@@ -138,7 +160,7 @@ impl DynamicListValue {
     }
 
     /// Adds a new value to the list.
-    pub fn push(&mut self, value: Dynamic) {
+    pub fn push(&mut self, value: Unspecified) {
         self.values.push(value);
     }
 
@@ -153,7 +175,7 @@ impl DynamicListValue {
     }
 
     /// Returns an iterator over all values in the list.
-    pub fn iter(&self) -> impl Iterator<Item = &Dynamic> {
+    pub fn iter(&self) -> impl Iterator<Item = &Unspecified> {
         self.values.iter()
     }
 
@@ -163,7 +185,7 @@ impl DynamicListValue {
     }
 }
 
-/// Contents of a [`Dynamic::Map`].
+/// Contents of an [`Unspecified::Map`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct DynamicMapValue {
     keys: DynamicListValue,
@@ -181,18 +203,26 @@ impl DynamicMapValue {
 }
 
 // Encoders ///////////////////////////////////////////////
-impl Encodable for Dynamic {
+impl Encodable for Unspecified {
+    /// The encoding format of unspecified
+    /// data is unspecified (i.e., [`Format::Fluid`]).
     const FORMAT: Format = Format::Fluid;
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        macros::match_values!(self, v, v.encode(writer))
+        match self {
+            Unspecified::None => Ok(()),
+            _ => macros::match_values!(self, v, v.encode(writer)),
+        }
     }
 
     fn encode_header(
         &self,
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
-        macros::match_values!(self, v, v.encode_header(writer))
+        match self {
+            Unspecified::None => Ok(()),
+            _ => macros::match_values!(self, v, v.encode_header(writer)),
+        }
     }
 }
 
@@ -269,13 +299,16 @@ impl Encodable for DynamicMapValue {
 }
 
 // Decoders ///////////////////////////////////////////////
-impl Decodable for Dynamic {
+impl Decodable for Unspecified {
     fn decode(
         &mut self,
         reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        macros::match_values!(self, v, v.decode(reader, header))
+        match self {
+            Unspecified::None => Ok(()),
+            _ => macros::match_values!(self, v, v.decode(reader, header)),
+        }
     }
 }
 
@@ -328,7 +361,7 @@ impl Decodable for DynamicDataValue {
             }
 
             // Decode the data.
-            let mut value = Dynamic::default(&field.typing);
+            let mut value = Unspecified::default_of(&field.typing);
             if field_format.is_structured() {
                 let header = reader.read_data()?;
                 value.decode(reader, Some(header))?;
@@ -371,7 +404,7 @@ impl Decodable for DynamicListValue {
         self.values.clear();
 
         // Decode all elements.
-        let value = Dynamic::default(&self.typing);
+        let value = Unspecified::default_of(&self.typing);
         for _ in 0..count {
             let mut value = value.clone();
             if self.typing.format().is_structured() {
@@ -402,9 +435,170 @@ impl Decodable for DynamicMapValue {
     }
 }
 
+// Serde ///////////////////////////////////////////////
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Unspecified {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Unspecified::None => serializer.serialize_unit(),
+            Unspecified::U8(v) => v.serialize(serializer),
+            Unspecified::I8(v) => v.serialize(serializer),
+            Unspecified::U16(v) => v.serialize(serializer),
+            Unspecified::I16(v) => v.serialize(serializer),
+            Unspecified::U32(v) => v.serialize(serializer),
+            Unspecified::I32(v) => v.serialize(serializer),
+            Unspecified::U64(v) => v.serialize(serializer),
+            Unspecified::I64(v) => v.serialize(serializer),
+            Unspecified::F32(v) => v.serialize(serializer),
+            Unspecified::F64(v) => v.serialize(serializer),
+            Unspecified::Bool(v) => v.serialize(serializer),
+            Unspecified::Text(v) => v.serialize(serializer),
+            Unspecified::Data(v) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(None)?;
+                for (field, value) in v.iter() {
+                    match value {
+                        Some(val) => map.serialize_entry(&field.name, val)?,
+                        Option::None => map.serialize_entry(&field.name, &())?,
+                    }
+                }
+                map.end()
+            }
+            Unspecified::List(v) => {
+                use serde::ser::SerializeSeq;
+                let mut seq = serializer.serialize_seq(Some(v.len() as usize))?;
+                for elem in v.iter() {
+                    seq.serialize_element(elem)?;
+                }
+                seq.end()
+            }
+            Unspecified::Map(v) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(v.keys.len() as usize))?;
+                for (key, value) in v.keys.iter().zip(v.values.iter()) {
+                    map.serialize_entry(key, value)?;
+                }
+                map.end()
+            }
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Unspecified {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(UnspecifiedVisitor)
+    }
+}
+
+/// Visitor that deserializes any self-describing
+/// value into the equivalent [`Unspecified`] variant.
+#[cfg(feature = "serde")]
+struct UnspecifiedVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
+    type Value = Unspecified;
+
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+        formatter.write_str("any value")
+    }
+
+    fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+        Ok(Unspecified::None)
+    }
+
+    fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+        Ok(Unspecified::None)
+    }
+
+    fn visit_some<D: serde::Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<Self::Value, D::Error> {
+        serde::Deserialize::deserialize(deserializer)
+    }
+
+    fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(Unspecified::Bool(v))
+    }
+
+    fn visit_u8<E: serde::de::Error>(self, v: u8) -> Result<Self::Value, E> {
+        Ok(Unspecified::U8(v))
+    }
+
+    fn visit_u16<E: serde::de::Error>(self, v: u16) -> Result<Self::Value, E> {
+        Ok(Unspecified::U16(v))
+    }
+
+    fn visit_u32<E: serde::de::Error>(self, v: u32) -> Result<Self::Value, E> {
+        Ok(Unspecified::U32(v))
+    }
+
+    fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+        Ok(Unspecified::U64(v))
+    }
+
+    fn visit_i8<E: serde::de::Error>(self, v: i8) -> Result<Self::Value, E> {
+        Ok(Unspecified::I8(v))
+    }
+
+    fn visit_i16<E: serde::de::Error>(self, v: i16) -> Result<Self::Value, E> {
+        Ok(Unspecified::I16(v))
+    }
+
+    fn visit_i32<E: serde::de::Error>(self, v: i32) -> Result<Self::Value, E> {
+        Ok(Unspecified::I32(v))
+    }
+
+    fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+        Ok(Unspecified::I64(v))
+    }
+
+    fn visit_f32<E: serde::de::Error>(self, v: f32) -> Result<Self::Value, E> {
+        Ok(Unspecified::F32(v))
+    }
+
+    fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
+        Ok(Unspecified::F64(v))
+    }
+
+    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(Unspecified::Text(v.into()))
+    }
+
+    fn visit_string<E: serde::de::Error>(self, v: alloc::string::String) -> Result<Self::Value, E> {
+        Ok(Unspecified::Text(v.into()))
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        // @caer: TODO: This approach will capture any possible data in a single pass, but will
+        // lead to a bloated schema (i.e., the list will be typed as `List(Unspecified)` instead of a more specific type like `List(U32)`).
+        // To mitigate this, we could implement some heuristics to try to infer a more specific type for the list based on the types of its elements.
+        // For example, if all elements are integers, we could infer that the list has type `List(I64)`.
+        let mut list = DynamicListValue::new(&Type::Unspecified);
+        while let Some(elem) = seq.next_element::<Unspecified>()? {
+            list.push(elem);
+        }
+        Ok(Unspecified::List(list))
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        // @caer: TODO: Similar to the above, this approach will capture any possible data in a single pass, but will lead to a bloated schema
+        // (i.e., the map will be typed as `Map((Unspecified, Unspecified))` instead of a more specific type like `Map((Text, U32))`).
+        let mut map_value = DynamicMapValue::new(&(Type::Unspecified, Type::Unspecified));
+        while let Some((key, value)) = map.next_entry::<Unspecified, Unspecified>()? {
+            map_value.keys.push(key);
+            map_value.values.push(value);
+        }
+        Ok(Unspecified::Map(map_value))
+    }
+}
+
 mod macros {
     /// Macro which generates match expressions
-    /// for all possible types of [`Value`].
+    /// for all possible value types of [`Unspecified`].
     macro_rules! match_values {
         (
             $enum_var:ident,
@@ -412,21 +606,22 @@ mod macros {
             $value_expr:expr
         ) => {
             match $enum_var {
-                Dynamic::U8($value_var) => $value_expr,
-                Dynamic::I8($value_var) => $value_expr,
-                Dynamic::U16($value_var) => $value_expr,
-                Dynamic::I16($value_var) => $value_expr,
-                Dynamic::U32($value_var) => $value_expr,
-                Dynamic::I32($value_var) => $value_expr,
-                Dynamic::U64($value_var) => $value_expr,
-                Dynamic::I64($value_var) => $value_expr,
-                Dynamic::F32($value_var) => $value_expr,
-                Dynamic::F64($value_var) => $value_expr,
-                Dynamic::Bool($value_var) => $value_expr,
-                Dynamic::Text($value_var) => $value_expr,
-                Dynamic::Data($value_var) => $value_expr,
-                Dynamic::List($value_var) => $value_expr,
-                Dynamic::Map($value_var) => $value_expr,
+                Unspecified::None => unreachable!("None handled before macro dispatch"),
+                Unspecified::U8($value_var) => $value_expr,
+                Unspecified::I8($value_var) => $value_expr,
+                Unspecified::U16($value_var) => $value_expr,
+                Unspecified::I16($value_var) => $value_expr,
+                Unspecified::U32($value_var) => $value_expr,
+                Unspecified::I32($value_var) => $value_expr,
+                Unspecified::U64($value_var) => $value_expr,
+                Unspecified::I64($value_var) => $value_expr,
+                Unspecified::F32($value_var) => $value_expr,
+                Unspecified::F64($value_var) => $value_expr,
+                Unspecified::Bool($value_var) => $value_expr,
+                Unspecified::Text($value_var) => $value_expr,
+                Unspecified::Data($value_var) => $value_expr,
+                Unspecified::List($value_var) => $value_expr,
+                Unspecified::Map($value_var) => $value_expr,
             }
         };
     }
@@ -464,26 +659,29 @@ mod tests {
 
         // Create some test data using dynamic APIs.
         let mut test_data_dynamic = DynamicDataValue::new(&test_data_type);
-        test_data_dynamic.insert("number".into(), Dynamic::I32(1));
-        test_data_dynamic.insert("floaty".into(), Dynamic::F64(60.90));
+        test_data_dynamic.insert("number".into(), Unspecified::I32(1));
+        test_data_dynamic.insert("floaty".into(), Unspecified::F64(60.90));
         let mut test_data_dynamic_list = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list.push(Dynamic::Text("one".into()));
-        test_data_dynamic_list.push(Dynamic::Text("two".into()));
-        test_data_dynamic.insert("text_list".into(), Dynamic::List(test_data_dynamic_list));
-        test_data_dynamic.insert("text".into(), Dynamic::Text("hello".into()));
+        test_data_dynamic_list.push(Unspecified::Text("one".into()));
+        test_data_dynamic_list.push(Unspecified::Text("two".into()));
+        test_data_dynamic.insert(
+            "text_list".into(),
+            Unspecified::List(test_data_dynamic_list),
+        );
+        test_data_dynamic.insert("text".into(), Unspecified::Text("hello".into()));
         let mut test_data_dynamic_nested = DynamicDataValue::new(&NestedTestData::typing());
-        test_data_dynamic_nested.insert("boolean".into(), Dynamic::Bool(true));
-        test_data_dynamic.insert("nested".into(), Dynamic::Data(test_data_dynamic_nested));
+        test_data_dynamic_nested.insert("boolean".into(), Unspecified::Bool(true));
+        test_data_dynamic.insert("nested".into(), Unspecified::Data(test_data_dynamic_nested));
         let mut test_data_dynamic_two_d = DynamicListValue::new(&Type::List(Type::Text.into()));
         let mut test_data_dynamic_list_a = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list_a.push(Dynamic::Text("three".into()));
-        test_data_dynamic_list_a.push(Dynamic::Text("four".into()));
-        test_data_dynamic_two_d.push(Dynamic::List(test_data_dynamic_list_a));
+        test_data_dynamic_list_a.push(Unspecified::Text("three".into()));
+        test_data_dynamic_list_a.push(Unspecified::Text("four".into()));
+        test_data_dynamic_two_d.push(Unspecified::List(test_data_dynamic_list_a));
         let mut test_data_dynamic_list_b = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list_b.push(Dynamic::Text("five".into()));
-        test_data_dynamic_list_b.push(Dynamic::Text("six".into()));
-        test_data_dynamic_two_d.push(Dynamic::List(test_data_dynamic_list_b));
-        test_data_dynamic.insert("two_d".into(), Dynamic::List(test_data_dynamic_two_d));
+        test_data_dynamic_list_b.push(Unspecified::Text("five".into()));
+        test_data_dynamic_list_b.push(Unspecified::Text("six".into()));
+        test_data_dynamic_two_d.push(Unspecified::List(test_data_dynamic_list_b));
+        test_data_dynamic.insert("two_d".into(), Unspecified::List(test_data_dynamic_two_d));
         let mut test_bytes_dynamic = vec![];
         test_bytes_dynamic.write_data(&test_data_dynamic)?;
 

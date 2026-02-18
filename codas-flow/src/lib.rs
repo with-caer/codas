@@ -85,7 +85,7 @@ impl<T: Flows> Flow<T> {
     /// Tries to claim the next publishable
     /// sequence in the flow, returning
     /// a [`UnpublishedData`] iff successful.
-    pub fn try_next(&mut self) -> Result<UnpublishedData<T>, Error> {
+    pub fn try_next(&mut self) -> Result<UnpublishedData<'_, T>, Error> {
         self.try_next_internal()
     }
 
@@ -93,7 +93,7 @@ impl<T: Flows> Flow<T> {
     /// in the flow, returning a [`UnpublishedData`]
     /// iff successful.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> impl Future<Output = Result<UnpublishedData<T>, Error>> {
+    pub fn next(&mut self) -> impl Future<Output = Result<UnpublishedData<'_, T>, Error>> {
         PublishNextFuture { flow: self }
     }
 
@@ -101,7 +101,7 @@ impl<T: Flows> Flow<T> {
     /// takes `self` as an immutable reference with
     /// interior mutability.
     #[inline(always)]
-    fn try_next_internal(&self) -> Result<UnpublishedData<T>, Error> {
+    fn try_next_internal(&self) -> Result<UnpublishedData<'_, T>, Error> {
         if let Some(next) = self.state.try_claim_publishable() {
             let next_item = UnpublishedData {
                 flow: self,
@@ -340,7 +340,7 @@ impl<T: Flows> FlowSubscriber<T> {
     /// takes `self` as an immutable reference with
     /// interior mutability.
     #[inline(always)]
-    fn try_next_internal(&self) -> Result<PublishedData<T>, Error> {
+    fn try_next_internal(&self) -> Result<PublishedData<'_, T>, Error> {
         if let Some(next) = self.receivable_seqs().next() {
             let data = PublishedData {
                 subscription: self,

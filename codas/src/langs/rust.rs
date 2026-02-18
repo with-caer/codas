@@ -377,6 +377,7 @@ pub fn generate_types(
 /// native Rust identifier.
 fn get_rust_type(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("codas::types::Unspecified"),
         Type::U8 => Text::Static("u8"),
         Type::U16 => Text::Static("u16"),
         Type::U32 => Text::Static("u32"),

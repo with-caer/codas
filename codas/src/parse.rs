@@ -363,6 +363,10 @@ An example Markdown Data Type.
 + `map_field` map of text to i32
 
     A field containing a map of text to numbers.
+
++ `unspecified_field` unspecified
+
+    A field with unspecified typing.
 "#;
 
     #[test]
@@ -448,6 +452,13 @@ An example Markdown Data Type.
                 name: "map_field".into(),
                 docs: Some("A field containing a map of text to numbers.".into()),
                 typing: Type::Map((Type::Text, Type::I32).into()),
+                optional: false,
+                flattened: false,
+            })
+            .with(DataField {
+                name: "unspecified_field".into(),
+                docs: Some("A field with unspecified typing.".into()),
+                typing: Type::Unspecified,
                 optional: false,
                 flattened: false,
             }),
@@ -564,6 +575,15 @@ An example Markdown Data Type.
             ParsedFieldType::Map("text".into(), "i32".into()),
             field.typing
         );
+        assert!(!field.optional);
+
+        let field: &ParsedField = &data.fields[6];
+        assert_eq!("unspecified_field", field.name);
+        assert_eq!(
+            "A field with unspecified typing.",
+            TEST_CODA_MARKDOWN[field.docs.clone()].trim()
+        );
+        assert_eq!(ParsedFieldType::Scalar("unspecified".into()), field.typing);
         assert!(!field.optional);
 
         Ok(())

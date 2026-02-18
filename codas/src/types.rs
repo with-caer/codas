@@ -23,12 +23,17 @@ pub mod list;
 pub mod map;
 pub mod number;
 mod text;
+pub use dynamic::Unspecified;
 pub use text::*;
 
 /// Enumeration of available built in types.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub enum Type {
+    /// Unspecified data.
+    #[default]
+    Unspecified,
+
     /// Unsigned (positive) 8-bit number.
     U8,
     /// Unsigned (positive) 16-bit number.
@@ -72,6 +77,7 @@ impl Type {
     /// The type's encoding format.
     pub const fn format(&self) -> Format {
         match self {
+            Type::Unspecified => Format::Fluid,
             Type::U8 => u8::FORMAT,
             Type::U16 => u16::FORMAT,
             Type::U32 => u32::FORMAT,
@@ -103,6 +109,7 @@ impl Type {
     /// This function assumes `name` is in ASCII lowercase.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
+            "unspecified" => Some(Type::Unspecified),
             "u8" => Some(Type::U8),
             "u16" => Some(Type::U16),
             "u32" => Some(Type::U32),
@@ -117,12 +124,6 @@ impl Type {
             "text" => Some(Type::Text),
             _ => None,
         }
-    }
-}
-
-impl Default for Type {
-    fn default() -> Self {
-        Self::Data(Unspecified::DATA_TYPE)
     }
 }
 
@@ -313,31 +314,6 @@ pub struct DataField {
     pub flattened: bool,
 }
 
-/// Unspecified data.
-///
-/// Every coda has an `Unspecified` data type
-/// with ordinal `0`. Data of this type is used
-/// as the default data for every coda.
-///
-/// The exact _contents_ of this data are
-/// entirely unspecified; they could be "null"
-/// or empty (the most common case), or could
-/// contain an undocumented sequence of data.
-/// That's why we call this type `Unspecified`
-/// instead of something like `Null` or `Void`.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Default, Clone, Debug, PartialEq)]
-#[non_exhaustive]
-pub struct Unspecified {}
-
-impl Unspecified {
-    /// Constant [`DataType`] for unspecified data.
-    pub const DATA_TYPE: DataType = DataType::new_fluid(
-        Text::from("Unspecified"),
-        Some(Text::from("Unspecified data.")),
-    );
-}
-
 /// A thing that _might_ contain data with a
 /// specific format `D`.
 ///
@@ -390,6 +366,7 @@ impl Encodable for Type {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         let ordinal = match self {
+            Type::Unspecified => 0u16,
             Type::U8 => 1u16,
             Type::U16 => 2u16,
             Type::U32 => 3u16,
@@ -442,12 +419,15 @@ impl Decodable for Type {
         let header = Self::ensure_header(
             header,
             &[
-                1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16,
-                14u16, 15u16,
+                0u16, 1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16,
+                13u16, 14u16, 15u16,
             ],
         )?;
 
         match header.format.ordinal {
+            0u16 => {
+                *self = Type::Unspecified;
+            }
             1u16 => {
                 *self = Type::U8;
             }
@@ -610,26 +590,6 @@ impl Decodable for DataField {
         reader.read_data_into(&mut self.name)?;
         reader.read_data_into(&mut self.docs)?;
         reader.read_data_into(&mut self.typing)?;
-        Ok(())
-    }
-}
-
-impl Encodable for Unspecified {
-    /// Surprise! The encoding format of unspecified
-    /// data is unspecified (i.e., [`Format::Fluid`]).
-    const FORMAT: Format = Format::Fluid;
-
-    fn encode(&self, _writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        Ok(())
-    }
-}
-
-impl Decodable for Unspecified {
-    fn decode(
-        &mut self,
-        _reader: &mut (impl ReadsDecodable + ?Sized),
-        _header: Option<DataHeader>,
-    ) -> Result<(), CodecError> {
         Ok(())
     }
 }

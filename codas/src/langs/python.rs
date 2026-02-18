@@ -123,14 +123,14 @@ pub fn generate_types(coda: &Coda, stream: &mut impl Writes) -> Result<(), Strea
                     r#"
                 # Field {ordinal}
                     @property
-                    def {field_name}(self) -> Optional[{field_type}]:
+                    def {field_name}(self) -> {field_type} | None:
                         """
                         {field_docs}
                         """
                         return self._{field_name}
-    
+
                     @{field_name}.setter
-                    def {field_name}(self, value: Optional[{field_type}]):
+                    def {field_name}(self, value: {field_type} | None):
                         if value is None:
                             self._{field_name} = None
                         else:
@@ -168,6 +168,7 @@ pub fn generate_types(coda: &Coda, stream: &mut impl Writes) -> Result<(), Strea
 /// Returns the Python literal of `type`'s default value.
 fn python_default_val(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("None"),
         Type::U8 => Text::Static("0"),
         Type::U16 => Text::Static("0"),
         Type::U32 => Text::Static("0"),
@@ -180,7 +181,7 @@ fn python_default_val(typing: &Type) -> Text {
         Type::F64 => Text::Static("0.0"),
         Type::Bool => Text::Static("False"),
         Type::Text => Text::Static("\"\""),
-        Type::Data(_) => Text::Static("{}"),
+        Type::Data(typing) => format!("{}()", typing.name.trim()).into(),
         Type::List(_) => Text::Static("[]"),
         Type::Map(_) => Text::Static("{}"),
     }
@@ -195,6 +196,7 @@ fn python_default_val(typing: &Type) -> Text {
 /// but codas have many.
 fn python_type_check(typing: &Type) -> Option<Text> {
     match typing {
+        Type::Unspecified => None,
         Type::U8 => Some(Text::Static(
             "if not 0 <= value <= 255: raise ValueError(\"u8 must be >= 0 and <= 255\")",
         )),
@@ -240,6 +242,7 @@ fn python_type_check(typing: &Type) -> Option<Text> {
 /// native Python identifier.
 fn python_type(typing: &Type) -> Text {
     match typing {
+        Type::Unspecified => Text::Static("object"),
         Type::U8 => Text::Static("int"),
         Type::U16 => Text::Static("int"),
         Type::U32 => Text::Static("int"),
