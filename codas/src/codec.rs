@@ -106,10 +106,10 @@
 //!
 //! Type | Description
 //! -----|-----------
-//! `u16`| The number of data following the header; `0` for no data, `1` for one data, and so on.
-//! `u16`| The ordinal of the data's type in it's documentation, defaulting to `0` ("unspecified").
+//! `u32`| The number of data following the header; `0` for no data, `1` for one data, and so on.
 //! `u16`| The total size in bytes of the data's [`Format::Blob`] fields, defaulting to `0` (none).
-//! `u16`| The total number of the data's [`Format::Data`] fields, defaulting to `0` (none).
+//! `u8` | The total number of the data's [`Format::Data`] fields, defaulting to `0` (none).
+//! `u8` | The ordinal of the data's type in it's documentation, defaulting to `0` ("unspecified").
 //!
 //! Because each [`DataHeader`] contains a count
 //! of how many distinct sequences of data follow
@@ -133,15 +133,12 @@ mod encode;
 pub use decode::*;
 pub use encode::*;
 
-/// Numeric type used for describing a [`Format`].
-pub type FormatMetadata = u16;
-
 /// The low-level encoding format of some data.
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Default)]
 pub enum Format {
     /// Unstructured sequence of binary
     /// data with a fixed size in bytes.
-    Blob(FormatMetadata),
+    Blob(u16),
 
     /// Structured sequence of data containing
     /// [`Format::Blob`]s and/or other [`Format::Data`].
@@ -158,11 +155,11 @@ pub enum Format {
 impl Format {
     /// Shorthand to return a new empty
     /// [`Format::Data`] with `ordinal`.
-    pub const fn data(ordinal: FormatMetadata) -> Self {
+    pub const fn data(ordinal: u8) -> Self {
         Self::Data(DataFormat {
-            ordinal,
             blob_size: 0,
             data_fields: 0,
+            ordinal,
         })
     }
 
@@ -187,9 +184,9 @@ impl Format {
             // the blob and a single data field.
             (Format::Blob(size), Format::Data(_)) | (Format::Blob(size), Format::Fluid) => {
                 DataFormat {
-                    ordinal: 0,
                     blob_size: size,
                     data_fields: 1,
+                    ordinal: 0,
                 }
                 .as_format()
             }
@@ -197,9 +194,9 @@ impl Format {
             // Adding blobs to data yields the same data,
             // with a bigger blob.
             (Format::Data(format), Format::Blob(size)) => DataFormat {
-                ordinal: format.ordinal,
                 blob_size: format.blob_size + size,
                 data_fields: format.data_fields,
+                ordinal: format.ordinal,
             }
             .as_format(),
 
@@ -207,9 +204,9 @@ impl Format {
             // with more data fields.
             (Format::Data(format), Format::Data(_)) | (Format::Data(format), Format::Fluid) => {
                 DataFormat {
-                    ordinal: format.ordinal,
                     blob_size: format.blob_size,
                     data_fields: format.data_fields + 1,
+                    ordinal: format.ordinal,
                 }
                 .as_format()
             }
@@ -227,9 +224,9 @@ impl Format {
             // Blobs are returned as unspecified data
             // containing the blob.
             Format::Blob(size) => DataFormat {
-                ordinal: 0,
                 blob_size: size,
                 data_fields: 0,
+                ordinal: 0,
             },
 
             // Data are returned as-is.
@@ -238,9 +235,9 @@ impl Format {
             // Fluids are returned as unspecified data
             // containing a single, unspecified data field.
             Format::Fluid => DataFormat {
-                ordinal: 0,
                 blob_size: 0,
                 data_fields: 1,
+                ordinal: 0,
             },
         }
     }
@@ -280,9 +277,9 @@ impl Format {
             Format::Fluid => DataHeader {
                 count: 0,
                 format: DataFormat {
-                    ordinal: 0,
                     blob_size: 0,
                     data_fields: 0,
+                    ordinal: 0,
                 },
             }
             .encode(writer),
@@ -297,9 +294,9 @@ impl Encodable for Format {
         match self {
             Format::Blob(size) => writer.write_data(size),
             Format::Data(format) => {
-                writer.write_data(&format.ordinal)?;
                 writer.write_data(&format.blob_size)?;
-                writer.write_data(&format.data_fields)
+                writer.write_data(&format.data_fields)?;
+                writer.write_data(&format.ordinal)
             }
             Format::Fluid => Ok(()),
         }
@@ -313,25 +310,25 @@ impl Encodable for Format {
             Format::Blob(_) => DataHeader {
                 count: 1,
                 format: DataFormat {
-                    ordinal: 1,
                     blob_size: 2,
                     data_fields: 0,
+                    ordinal: 1,
                 },
             },
             Format::Data(_) => DataHeader {
                 count: 1,
                 format: DataFormat {
-                    ordinal: 2,
-                    blob_size: 2 + 2 + 2,
+                    blob_size: 2 + 1 + 1,
                     data_fields: 0,
+                    ordinal: 2,
                 },
             },
             Format::Fluid => DataHeader {
                 count: 1,
                 format: DataFormat {
-                    ordinal: 3,
                     blob_size: 0,
                     data_fields: 0,
+                    ordinal: 3,
                 },
             },
         };
@@ -356,16 +353,16 @@ impl Decodable for Format {
             }
 
             2 => {
-                let mut ordinal = 0;
-                reader.read_data_into(&mut ordinal)?;
                 let mut blob_size = 0;
                 reader.read_data_into(&mut blob_size)?;
                 let mut data_fields = 0;
                 reader.read_data_into(&mut data_fields)?;
+                let mut ordinal = 0;
+                reader.read_data_into(&mut ordinal)?;
                 *self = Format::Data(DataFormat {
-                    ordinal,
                     blob_size,
                     data_fields,
+                    ordinal,
                 });
             }
 
@@ -381,20 +378,22 @@ impl Decodable for Format {
 }
 
 /// Contents of a [`Format::Data`].
+///
+/// Fields are ordered to match wire layout.
 #[derive(Default, Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct DataFormat {
-    /// Ordinal identifier of the data's
-    /// type in it's corresponding documentation,
-    /// or `0` if the type is unspecified.
-    pub ordinal: FormatMetadata,
-
     /// The total size in bytes of the
     /// [`Format::Blob`] fields in the data.
-    pub blob_size: FormatMetadata,
+    pub blob_size: u16,
 
     /// The total number of [`Format::Data`]
     /// fields in the data.
-    pub data_fields: FormatMetadata,
+    pub data_fields: u8,
+
+    /// Ordinal identifier of the data's
+    /// type in it's corresponding documentation,
+    /// or `0` if the type is unspecified.
+    pub ordinal: u8,
 }
 
 impl DataFormat {
@@ -411,7 +410,7 @@ impl DataFormat {
 pub struct DataHeader {
     /// The number of encoded data following this header,
     /// each having the same format as [`Self::format`].
-    pub count: FormatMetadata,
+    pub count: u32,
 
     /// The format of the data following this header.
     pub format: DataFormat,
@@ -421,17 +420,18 @@ impl Encodable for DataHeader {
     /// Encoded as a [`Format::Blob(8)`](Format::Blob)
     /// containing, in order:
     ///
-    /// 1. [`Self::count`]
-    /// 2. [`DataFormat::ordinal`]
-    /// 3. [`DataFormat::blob_size`]
-    /// 4. [`DataFormat::data_fields`]
+    /// 1. [`Self::count`] as [`u32`]
+    /// 2. [`DataFormat::blob_size`] as [`u16`]
+    /// 3. [`DataFormat::data_fields`] as [`u8`]
+    /// 4. [`DataFormat::ordinal`] as [`u8`]
     ///
-    /// All values are encoded as [`u16`].
+    /// All values are little-endian. Total: 8 bytes.
+    #[allow(clippy::eq_op)]
     const FORMAT: Format = Format::Blob(0)
-        .with(Format::Blob((u16::BITS / 8) as FormatMetadata))
-        .with(Format::Blob((u16::BITS / 8) as FormatMetadata))
-        .with(Format::Blob((u16::BITS / 8) as FormatMetadata))
-        .with(Format::Blob((u16::BITS / 8) as FormatMetadata));
+        .with(Format::Blob((u32::BITS / 8) as u16)) // count
+        .with(Format::Blob((u16::BITS / 8) as u16)) // blob_size
+        .with(Format::Blob((u8::BITS / 8) as u16)) // data_fields
+        .with(Format::Blob((u8::BITS / 8) as u16)); // ordinal
 
     #[inline(always)]
     fn encode(
@@ -439,9 +439,9 @@ impl Encodable for DataHeader {
         writer: &mut (impl encode::WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         writer.write_all(&self.count.to_le_bytes())?;
-        writer.write_all(&self.format.ordinal.to_le_bytes())?;
         writer.write_all(&self.format.blob_size.to_le_bytes())?;
         writer.write_all(&self.format.data_fields.to_le_bytes())?;
+        writer.write_all(&self.format.ordinal.to_le_bytes())?;
         Ok(())
     }
 
@@ -465,17 +465,25 @@ impl Decodable for DataHeader {
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;
 
-        // Temporary buffer for the decoded bytes.
-        let mut bytes = [0u8; (u16::BITS / 8) as usize];
+        // count: u32 LE (4 bytes)
+        let mut count_bytes = [0u8; 4];
+        reader.read_exact(&mut count_bytes)?;
+        self.count = u32::from_le_bytes(count_bytes);
 
-        reader.read_exact(&mut bytes)?;
-        self.count = u16::from_le_bytes(bytes);
-        reader.read_exact(&mut bytes)?;
-        self.format.ordinal = u16::from_le_bytes(bytes);
-        reader.read_exact(&mut bytes)?;
-        self.format.blob_size = u16::from_le_bytes(bytes);
-        reader.read_exact(&mut bytes)?;
-        self.format.data_fields = u16::from_le_bytes(bytes);
+        // blob_size: u16 LE (2 bytes)
+        let mut blob_bytes = [0u8; 2];
+        reader.read_exact(&mut blob_bytes)?;
+        self.format.blob_size = u16::from_le_bytes(blob_bytes);
+
+        // data_fields: u8 (1 byte)
+        let mut df_byte = [0u8; 1];
+        reader.read_exact(&mut df_byte)?;
+        self.format.data_fields = df_byte[0];
+
+        // ordinal: u8 (1 byte)
+        let mut ordinal_byte = [0u8; 1];
+        reader.read_exact(&mut ordinal_byte)?;
+        self.format.ordinal = ordinal_byte[0];
 
         Ok(())
     }
@@ -503,18 +511,15 @@ pub enum CodecError {
 
     /// An unsupported data format ordinal was given to a decoder.
     #[snafu(display("unsupported data format (ordinal {ordinal:?})"))]
-    UnsupportedDataFormat {
-        ordinal: FormatMetadata,
-        backtrace: Backtrace,
-    },
+    UnsupportedDataFormat { ordinal: u8, backtrace: Backtrace },
 
     /// A decoder expected to decode more blob fields' data.
     #[snafu(display("expected to decode {length} more bytes of blob field data"))]
-    MissingBlobLength { length: FormatMetadata },
+    MissingBlobLength { length: u16 },
 
     /// A decoder expected to decode more data fields.
     #[snafu(display("expected to decode {count} more fields of data"))]
-    MissingDataFields { count: FormatMetadata },
+    MissingDataFields { count: u8 },
 
     /// An error occurred while reading or
     /// writing the underlying data stream.
@@ -575,11 +580,11 @@ mod tests {
     /// _Manually_ encodes a single [`TestData`]
     /// into `bytes`.
     pub(super) fn encode_test_data(bytes: &mut Vec<u8>) {
-        // Encode header.
-        bytes.write_all(&1u16.to_le_bytes()).unwrap(); // count
-        bytes.write_all(&0u16.to_le_bytes()).unwrap(); // ordinal
+        // Encode header: count(u32) + blob_size(u16) + data_fields(u8) + ordinal(u8)
+        bytes.write_all(&1u32.to_le_bytes()).unwrap(); // count
         bytes.write_all(&12u16.to_le_bytes()).unwrap(); // blob size
-        bytes.write_all(&1u16.to_le_bytes()).unwrap(); // data fields
+        bytes.write_all(&1u8.to_le_bytes()).unwrap(); // data fields
+        bytes.write_all(&0u8.to_le_bytes()).unwrap(); // ordinal
 
         // Encode blob fields.
         bytes
@@ -589,13 +594,13 @@ mod tests {
             .write_all(&TestData::default().num_b.to_le_bytes())
             .unwrap();
 
-        // Encode data
+        // Encode data: count(u32) + blob_size(u16) + data_fields(u8) + ordinal(u8)
         bytes
-            .write_all(&(TestData::default().text.len() as u16).to_le_bytes())
+            .write_all(&(TestData::default().text.len() as u32).to_le_bytes())
             .unwrap(); // count
-        bytes.write_all(&0u16.to_le_bytes()).unwrap(); // ordinal
         bytes.write_all(&1u16.to_le_bytes()).unwrap(); // blob size
-        bytes.write_all(&0u16.to_le_bytes()).unwrap(); // data fields
+        bytes.write_all(&0u8.to_le_bytes()).unwrap(); // data fields
+        bytes.write_all(&0u8.to_le_bytes()).unwrap(); // ordinal
         bytes
             .write_all(TestData::default().text.as_bytes())
             .unwrap();
@@ -612,9 +617,9 @@ mod tests {
 
         // Data.
         let data_format = Format::Data(DataFormat {
-            ordinal: 1337,
             blob_size: 9001,
             data_fields: 42,
+            ordinal: 137,
         });
         let mut bytes = vec![];
         bytes.write_data(&data_format).unwrap();

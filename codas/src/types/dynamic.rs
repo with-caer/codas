@@ -1,11 +1,9 @@
 //! ## Unstable
-use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc};
+use alloc::vec::Vec;
 
-use crate::{
-    codec::{
-        CodecError, DataHeader, Decodable, Encodable, Format, FormatMetadata, WritesEncodable,
-    },
-    types::{DataField, DataType, Type},
+use crate::codec::{
+    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    WritesEncodable,
 };
 
 use super::Text;
@@ -41,163 +39,113 @@ pub enum Unspecified {
     Bool(bool),
     Text(Text),
 
-    /// Set of named dynamic values (i.e., fields).
-    Data(DynamicDataValue),
-
     /// List of dynamic values.
-    List(DynamicListValue),
+    List(Vec<Unspecified>),
 
-    /// Mapping of dynamic values.
-    Map(DynamicMapValue),
+    /// Mapping of dynamic values (parallel key/value vecs).
+    Map {
+        keys: Vec<Unspecified>,
+        values: Vec<Unspecified>,
+    },
+
+    /// Opaque round-tripping of user-defined types.
+    /// The `raw` bytes contain the complete payload
+    /// (blob + all data field headers and data) verbatim.
+    Data {
+        format: DataFormat,
+        raw: Vec<u8>,
+    },
 }
+
+/// Ordinal-to-type-tag constants for self-describing encoding.
+/// System/built-in ordinals count down from 255 (high end of u8).
+/// User-defined ordinals start at 1 (low end).
+/// Both ranges grow toward the middle, maximizing the gap.
+/// Ordinal 0 = Unspecified/None.
+pub(crate) const ORD_NONE: u8 = 0;
+pub(crate) const ORD_U8: u8 = 255;
+pub(crate) const ORD_U16: u8 = 254;
+pub(crate) const ORD_U32: u8 = 253;
+pub(crate) const ORD_U64: u8 = 252;
+pub(crate) const ORD_I8: u8 = 251;
+pub(crate) const ORD_I16: u8 = 250;
+pub(crate) const ORD_I32: u8 = 249;
+pub(crate) const ORD_I64: u8 = 248;
+pub(crate) const ORD_F32: u8 = 247;
+pub(crate) const ORD_F64: u8 = 246;
+pub(crate) const ORD_BOOL: u8 = 245;
+pub(crate) const ORD_TEXT: u8 = 244;
+/// Used by the Type enum codec to round-trip a [`super::DataType`] descriptor.
+/// Not used by [`Unspecified`], which preserves user-defined ordinals directly.
+pub(crate) const ORD_DATA: u8 = 243;
+pub(crate) const ORD_LIST: u8 = 242;
+pub(crate) const ORD_MAP: u8 = 241;
 
 impl Unspecified {
     /// Constant [`DataType`] for unspecified data.
-    pub const DATA_TYPE: DataType = DataType::new_fluid(
+    pub const DATA_TYPE: super::DataType = super::DataType::new_fluid(
         Text::from("Unspecified"),
         Some(Text::from("Unspecified data.")),
     );
 
     /// Returns the default value of a `typing`.
-    pub fn default_of(typing: &Type) -> Unspecified {
+    pub fn default_of(typing: &super::Type) -> Unspecified {
         match typing {
-            Type::Unspecified => Unspecified::None,
-            Type::U8 => Unspecified::U8(0),
-            Type::I8 => Unspecified::I8(0),
-            Type::U16 => Unspecified::U16(0),
-            Type::I16 => Unspecified::I16(0),
-            Type::U32 => Unspecified::U32(0),
-            Type::I32 => Unspecified::I32(0),
-            Type::U64 => Unspecified::U64(0),
-            Type::I64 => Unspecified::I64(0),
-            Type::F32 => Unspecified::F32(0.0),
-            Type::F64 => Unspecified::F64(0.0),
-            Type::Bool => Unspecified::Bool(false),
-            Type::Text => Unspecified::Text(Text::default()),
-            Type::Data(typing) => Unspecified::Data(DynamicDataValue::new(typing)),
-            Type::List(typing) => Unspecified::List(DynamicListValue::new(typing)),
-            Type::Map(typing) => Unspecified::Map(DynamicMapValue::new(typing)),
-        }
-    }
-}
-
-/// Contents of an [`Unspecified::Data`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct DynamicDataValue {
-    typing: Arc<DataType>,
-    fields: Option<BTreeMap<Text, Unspecified>>,
-}
-
-impl DynamicDataValue {
-    /// Returns a new, default data value of `typing`.
-    pub fn new(typing: &DataType) -> Self {
-        Self {
-            typing: Arc::new(typing.to_owned()),
-            fields: None,
+            super::Type::Unspecified => Unspecified::None,
+            super::Type::U8 => Unspecified::U8(0),
+            super::Type::I8 => Unspecified::I8(0),
+            super::Type::U16 => Unspecified::U16(0),
+            super::Type::I16 => Unspecified::I16(0),
+            super::Type::U32 => Unspecified::U32(0),
+            super::Type::I32 => Unspecified::I32(0),
+            super::Type::U64 => Unspecified::U64(0),
+            super::Type::I64 => Unspecified::I64(0),
+            super::Type::F32 => Unspecified::F32(0.0),
+            super::Type::F64 => Unspecified::F64(0.0),
+            super::Type::Bool => Unspecified::Bool(false),
+            super::Type::Text => Unspecified::Text(Text::default()),
+            super::Type::Data(typing) => Unspecified::Data {
+                format: typing.format().as_data_format(),
+                raw: Vec::new(),
+            },
+            super::Type::List(_) => Unspecified::List(Vec::new()),
+            super::Type::Map(_) => Unspecified::Map {
+                keys: Vec::new(),
+                values: Vec::new(),
+            },
         }
     }
 
-    /// Removes all values from this data,
-    /// resetting them to their default values.
-    pub fn reset(&mut self) {
-        if let Some(fields) = self.fields.as_mut() {
-            fields.clear();
+    /// Returns the type-tag ordinal for this value.
+    fn type_ordinal(&self) -> u8 {
+        match self {
+            Unspecified::None => ORD_NONE,
+            Unspecified::U8(_) => ORD_U8,
+            Unspecified::I8(_) => ORD_I8,
+            Unspecified::U16(_) => ORD_U16,
+            Unspecified::I16(_) => ORD_I16,
+            Unspecified::U32(_) => ORD_U32,
+            Unspecified::I32(_) => ORD_I32,
+            Unspecified::U64(_) => ORD_U64,
+            Unspecified::I64(_) => ORD_I64,
+            Unspecified::F32(_) => ORD_F32,
+            Unspecified::F64(_) => ORD_F64,
+            Unspecified::Bool(_) => ORD_BOOL,
+            Unspecified::Text(_) => ORD_TEXT,
+            Unspecified::List(_) => ORD_LIST,
+            Unspecified::Map { .. } => ORD_MAP,
+            Unspecified::Data { format, .. } => format.ordinal,
         }
     }
 
-    /// Inserts a `value` for the field with `name`.
-    pub fn insert(&mut self, name: Text, value: Unspecified) {
-        let fields = self.fields.get_or_insert_with(Default::default);
-        fields.insert(name, value);
-    }
-
-    /// Returns an iterator over all fields in the data.
-    ///
-    /// The iterator yields fields in order by ordinal,
-    /// yielding `None` for unset fields.
-    pub fn iter(&self) -> impl Iterator<Item = (&DataField, Option<&Unspecified>)> {
-        self.typing
-            .iter()
-            .map(|field| (field, self.fields.as_ref().and_then(|f| f.get(&field.name))))
-    }
-
-    /// Applies `proc` to each field in the data.
-    ///
-    /// Fields are visited in order by ordinal. If
-    /// a field is unset, it will be initialized to
-    /// a default value before `proc` is invoked.
-    pub fn visit_mut(&mut self, mut proc: impl FnMut(&DataField, &mut Unspecified)) {
-        let fields = self.fields.get_or_insert_with(Default::default);
-        for field in self.typing.iter() {
-            let value = fields
-                .entry(field.name.clone())
-                .or_insert_with(|| Unspecified::default_of(&field.typing));
-
-            proc(field, value);
-        }
-    }
-}
-
-/// Contents of an [`Unspecified::List`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct DynamicListValue {
-    typing: Arc<Type>,
-    values: alloc::vec::Vec<Unspecified>,
-}
-
-impl DynamicListValue {
-    /// Returns a new, empty list of values with `typing`.
-    pub fn new(typing: &Type) -> Self {
-        Self {
-            typing: Arc::new(typing.to_owned()),
-            values: alloc::vec::Vec::new(),
-        }
-    }
-
-    /// Removes all values from the list.
-    pub fn clear(&mut self) {
-        self.values.clear();
-    }
-
-    /// Adds a new value to the list.
-    pub fn push(&mut self, value: Unspecified) {
-        self.values.push(value);
-    }
-
-    /// Returns the number of values in the list.
-    pub fn len(&self) -> FormatMetadata {
-        self.values.len() as FormatMetadata
-    }
-
-    /// Returns true iff the list is empty.
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-
-    /// Returns an iterator over all values in the list.
-    pub fn iter(&self) -> impl Iterator<Item = &Unspecified> {
-        self.values.iter()
-    }
-
-    /// Returns the typing of the values in the list.
-    pub fn item_typing(&self) -> &Type {
-        &self.typing
-    }
-}
-
-/// Contents of an [`Unspecified::Map`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct DynamicMapValue {
-    keys: DynamicListValue,
-    values: DynamicListValue,
-}
-
-impl DynamicMapValue {
-    /// Returns a new, empty map with `typing`.
-    pub fn new(typing: &(Type, Type)) -> Self {
-        Self {
-            keys: DynamicListValue::new(&typing.0),
-            values: DynamicListValue::new(&typing.1),
+    /// Returns the blob size for scalar types.
+    fn scalar_blob_size(&self) -> u16 {
+        match self {
+            Unspecified::U8(_) | Unspecified::I8(_) | Unspecified::Bool(_) => 1,
+            Unspecified::U16(_) | Unspecified::I16(_) => 2,
+            Unspecified::U32(_) | Unspecified::I32(_) | Unspecified::F32(_) => 4,
+            Unspecified::U64(_) | Unspecified::I64(_) | Unspecified::F64(_) => 8,
+            _ => 0,
         }
     }
 }
@@ -211,7 +159,35 @@ impl Encodable for Unspecified {
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         match self {
             Unspecified::None => Ok(()),
-            _ => macros::match_values!(self, v, v.encode(writer)),
+            Unspecified::U8(v) => v.encode(writer),
+            Unspecified::I8(v) => v.encode(writer),
+            Unspecified::U16(v) => v.encode(writer),
+            Unspecified::I16(v) => v.encode(writer),
+            Unspecified::U32(v) => v.encode(writer),
+            Unspecified::I32(v) => v.encode(writer),
+            Unspecified::U64(v) => v.encode(writer),
+            Unspecified::I64(v) => v.encode(writer),
+            Unspecified::F32(v) => v.encode(writer),
+            Unspecified::F64(v) => v.encode(writer),
+            Unspecified::Bool(v) => v.encode(writer),
+            Unspecified::Text(v) => v.encode(writer),
+            Unspecified::List(items) => {
+                for item in items {
+                    writer.write_data(item)?;
+                }
+                Ok(())
+            }
+            Unspecified::Map { keys, values } => {
+                // Encode keys as a self-describing list.
+                encode_unspecified_list(keys, writer)?;
+                // Encode values as a self-describing list.
+                encode_unspecified_list(values, writer)?;
+                Ok(())
+            }
+            Unspecified::Data { raw, .. } => {
+                writer.write_all(raw)?;
+                Ok(())
+            }
         }
     }
 
@@ -221,215 +197,309 @@ impl Encodable for Unspecified {
     ) -> Result<(), CodecError> {
         match self {
             Unspecified::None => Ok(()),
-            _ => macros::match_values!(self, v, v.encode_header(writer)),
-        }
-    }
-}
 
-impl Encodable for DynamicDataValue {
-    const FORMAT: Format = Format::Fluid;
-
-    fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        // No-op if no fields are set.
-        if self.fields.is_none() {
-            return Ok(());
-        }
-        let fields = self.fields.as_ref().unwrap();
-
-        // Encode all fields in order.
-        for field in self.typing.iter() {
-            if let Some(value) = fields.get(&field.name) {
-                writer.write_data(value)?;
-            } else {
-                field.typing.format().encode_default_header(writer)?;
-                field.typing.format().encode_default_value(writer)?;
+            // Scalars: header with type-tagged ordinal.
+            Unspecified::U8(_)
+            | Unspecified::I8(_)
+            | Unspecified::U16(_)
+            | Unspecified::I16(_)
+            | Unspecified::U32(_)
+            | Unspecified::I32(_)
+            | Unspecified::U64(_)
+            | Unspecified::I64(_)
+            | Unspecified::F32(_)
+            | Unspecified::F64(_)
+            | Unspecified::Bool(_) => DataHeader {
+                count: 1,
+                format: DataFormat {
+                    blob_size: self.scalar_blob_size(),
+                    data_fields: 0,
+                    ordinal: self.type_ordinal(),
+                },
             }
+            .encode(writer),
+
+            // Text: same wire format as Text::encode_header but with ORD_TEXT.
+            Unspecified::Text(v) => DataHeader {
+                count: v.len() as u32,
+                format: DataFormat {
+                    blob_size: 1,
+                    data_fields: 0,
+                    ordinal: ORD_TEXT,
+                },
+            }
+            .encode(writer),
+
+            // List: each item self-describes.
+            Unspecified::List(items) => DataHeader {
+                count: items.len() as u32,
+                format: DataFormat {
+                    blob_size: 0,
+                    data_fields: 1,
+                    ordinal: ORD_LIST,
+                },
+            }
+            .encode(writer),
+
+            // Map: 2 data fields (keys list + values list).
+            Unspecified::Map { .. } => DataHeader {
+                count: 1,
+                format: DataFormat {
+                    blob_size: 0,
+                    data_fields: 2,
+                    ordinal: ORD_MAP,
+                },
+            }
+            .encode(writer),
+
+            // Typed: preserve the original format.
+            Unspecified::Data { format, .. } => DataHeader {
+                count: 1,
+                format: *format,
+            }
+            .encode(writer),
         }
-
-        Ok(())
-    }
-
-    fn encode_header(
-        &self,
-        writer: &mut (impl WritesEncodable + ?Sized),
-    ) -> Result<(), CodecError> {
-        let count = if self.fields.is_some() { 1 } else { 0 };
-
-        DataHeader {
-            count,
-            format: self.typing.format().as_data_format(),
-        }
-        .encode(writer)
     }
 }
 
-impl Encodable for DynamicListValue {
-    const FORMAT: Format = Format::Fluid;
+/// Encodes a `Vec<Unspecified>` as a self-describing list
+/// (header + items), used for map keys/values.
+fn encode_unspecified_list(
+    items: &[Unspecified],
+    writer: &mut (impl WritesEncodable + ?Sized),
+) -> Result<(), CodecError> {
+    // Write list header.
+    DataHeader {
+        count: items.len() as u32,
+        format: DataFormat {
+            blob_size: 0,
+            data_fields: 1,
+            ordinal: ORD_LIST,
+        },
+    }
+    .encode(writer)?;
 
-    fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        for value in &self.values {
-            writer.write_data(value)?;
-        }
-
-        Ok(())
+    // Write each item self-describing.
+    for item in items {
+        writer.write_data(item)?;
     }
 
-    fn encode_header(
-        &self,
-        writer: &mut (impl WritesEncodable + ?Sized),
-    ) -> Result<(), CodecError> {
-        let count = self.values.len() as FormatMetadata;
-
-        // Apply the same formatting rules as the Vec codec.
-        let format = Format::data(0).with(self.typing.format()).as_data_format();
-        DataHeader { count, format }.encode(writer)
-    }
+    Ok(())
 }
 
-impl Encodable for DynamicMapValue {
-    const FORMAT: Format = Format::data(0)
-        .with(DynamicListValue::FORMAT)
-        .with(DynamicListValue::FORMAT);
+/// Reads a complete data sequence (header + payload) from `reader`,
+/// appending all bytes verbatim to `buf`.
+fn capture_data(
+    reader: &mut (impl ReadsDecodable + ?Sized),
+    buf: &mut Vec<u8>,
+) -> Result<(), CodecError> {
+    // Read and capture the header.
+    let header: DataHeader = reader.read_data()?;
+    header.encode(buf)?;
 
-    fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        writer.write_data(&self.keys)?;
-        writer.write_data(&self.values)?;
-        Ok(())
+    // Capture payload for each count.
+    for _ in 0..header.count {
+        capture_data_with_format(reader, buf, header.format)?;
     }
+
+    Ok(())
+}
+
+/// Reads the payload of data with `format` from `reader`,
+/// appending all bytes verbatim to `buf`.
+fn capture_data_with_format(
+    reader: &mut (impl ReadsDecodable + ?Sized),
+    buf: &mut Vec<u8>,
+    format: DataFormat,
+) -> Result<(), CodecError> {
+    // Capture blob bytes.
+    if format.blob_size > 0 {
+        let start = buf.len();
+        buf.resize(start + format.blob_size as usize, 0);
+        reader.read_exact(&mut buf[start..])?;
+    }
+
+    // Capture data fields recursively.
+    for _ in 0..format.data_fields {
+        capture_data(reader, buf)?;
+    }
+
+    Ok(())
 }
 
 // Decoders ///////////////////////////////////////////////
 impl Decodable for Unspecified {
     fn decode(
         &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        match self {
-            Unspecified::None => Ok(()),
-            _ => macros::match_values!(self, v, v.decode(reader, header)),
-        }
-    }
-}
-
-impl Decodable for DynamicDataValue {
-    fn decode(
-        &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
-        header: Option<DataHeader>,
-    ) -> Result<(), CodecError> {
-        // FIXME: Handle other data types in the same coda.
-        let header = Self::ensure_header(header, &[self.typing.format().as_data_format().ordinal])?;
-
-        // FIXME: Skip all but the last item.
-        if header.count > 1 {
-            for _ in 0..header.count - 1 {
-                reader.skip_data_with_format(header.format)?;
+        let header = match header {
+            Some(h) => h,
+            None => {
+                // No header means we were called in a blob context.
+                // This shouldn't happen for self-describing Unspecified.
+                *self = Unspecified::None;
+                return Ok(());
             }
-        }
+        };
 
-        // Clear any existing fields.
-        let fields = self.fields.get_or_insert(Default::default());
-        fields.clear();
+        match header.format.ordinal {
+            ORD_NONE => {
+                // Skip any data that might be present.
+                for _ in 0..header.count {
+                    reader.skip_blob(header.format.blob_size as usize)?;
+                    for _ in 0..header.format.data_fields {
+                        reader.skip_data()?;
+                    }
+                }
+                *self = Unspecified::None;
+            }
 
-        // Track how much of the data we've decoded so
-        // we can skip any unsupported data.
-        let mut remaining_blob = header.format.blob_size;
-        let mut remaining_fields = header.format.data_fields;
+            ORD_U8 => {
+                let mut v = 0u8;
+                v.decode(reader, None)?;
+                *self = Unspecified::U8(v);
+            }
+            ORD_U16 => {
+                let mut v = 0u16;
+                v.decode(reader, None)?;
+                *self = Unspecified::U16(v);
+            }
+            ORD_U32 => {
+                let mut v = 0u32;
+                v.decode(reader, None)?;
+                *self = Unspecified::U32(v);
+            }
+            ORD_U64 => {
+                let mut v = 0u64;
+                v.decode(reader, None)?;
+                *self = Unspecified::U64(v);
+            }
+            ORD_I8 => {
+                let mut v = 0i8;
+                v.decode(reader, None)?;
+                *self = Unspecified::I8(v);
+            }
+            ORD_I16 => {
+                let mut v = 0i16;
+                v.decode(reader, None)?;
+                *self = Unspecified::I16(v);
+            }
+            ORD_I32 => {
+                let mut v = 0i32;
+                v.decode(reader, None)?;
+                *self = Unspecified::I32(v);
+            }
+            ORD_I64 => {
+                let mut v = 0i64;
+                v.decode(reader, None)?;
+                *self = Unspecified::I64(v);
+            }
+            ORD_F32 => {
+                let mut v = 0.0f32;
+                v.decode(reader, None)?;
+                *self = Unspecified::F32(v);
+            }
+            ORD_F64 => {
+                let mut v = 0.0f64;
+                v.decode(reader, None)?;
+                *self = Unspecified::F64(v);
+            }
+            ORD_BOOL => {
+                let mut v = false;
+                v.decode(reader, None)?;
+                *self = Unspecified::Bool(v);
+            }
 
-        // Decode all fields in order.
-        for field in self.typing.iter() {
-            let field_format = field.typing.format();
+            ORD_TEXT => {
+                let mut v = Text::default();
+                // Pass the header through with ordinal translated to 0
+                // since Text::decode expects ordinal 0.
+                let text_header = DataHeader {
+                    count: header.count,
+                    format: DataFormat {
+                        blob_size: header.format.blob_size,
+                        data_fields: header.format.data_fields,
+                        ordinal: 0,
+                    },
+                };
+                v.decode(reader, Some(text_header))?;
+                *self = Unspecified::Text(v);
+            }
 
-            // Update trackers.
-            if field_format.is_structured() {
-                // If we encounter structured data with blob
-                // data still remaining, skip the remaining blob.
-                if remaining_blob > 0 {
-                    reader.skip_blob(remaining_blob as usize)?;
-                    remaining_blob = 0;
+            ORD_LIST => {
+                let count = header.count as usize;
+                let mut items = Vec::with_capacity(count);
+                for _ in 0..count {
+                    if header.format.data_fields > 0 {
+                        // Each item is self-describing (has its own header).
+                        let item_header: DataHeader = reader.read_data()?;
+                        let mut item = Unspecified::None;
+                        item.decode(reader, Some(item_header))?;
+                        items.push(item);
+                    } else {
+                        // Items are blobs without individual headers.
+                        reader.skip_blob(header.format.blob_size as usize)?;
+                        items.push(Unspecified::None);
+                    }
+                }
+                *self = Unspecified::List(items);
+            }
+
+            ORD_MAP => {
+                // Read two sub-lists (keys, values).
+                let mut keys = Unspecified::None;
+                let keys_header: DataHeader = reader.read_data()?;
+                keys.decode(reader, Some(keys_header))?;
+
+                let mut values = Unspecified::None;
+                let values_header: DataHeader = reader.read_data()?;
+                values.decode(reader, Some(values_header))?;
+
+                // Extract the Vec from the decoded lists.
+                let keys_vec = match keys {
+                    Unspecified::List(v) => v,
+                    _ => Vec::new(),
+                };
+                let values_vec = match values {
+                    Unspecified::List(v) => v,
+                    _ => Vec::new(),
+                };
+
+                *self = Unspecified::Map {
+                    keys: keys_vec,
+                    values: values_vec,
+                };
+            }
+
+            // User-defined type — opaque capture.
+            ordinal => {
+                let mut raw = Vec::new();
+
+                // Capture blob bytes.
+                if header.format.blob_size > 0 {
+                    let blob_size = header.format.blob_size as usize;
+                    let start = raw.len();
+                    raw.resize(start + blob_size, 0);
+                    reader.read_exact(&mut raw[start..])?;
                 }
 
-                remaining_fields = remaining_fields
-                    .checked_sub(1)
-                    .ok_or(CodecError::MissingDataFields { count: 1 })?;
-            } else {
-                let blob_size = field_format.as_data_format().blob_size;
-                remaining_blob = remaining_blob
-                    .checked_sub(blob_size)
-                    .ok_or(CodecError::MissingBlobLength { length: blob_size })?;
+                // Capture data fields (header + payload) verbatim.
+                for _ in 0..header.format.data_fields {
+                    capture_data(reader, &mut raw)?;
+                }
+
+                *self = Unspecified::Data {
+                    format: DataFormat {
+                        blob_size: header.format.blob_size,
+                        data_fields: header.format.data_fields,
+                        ordinal,
+                    },
+                    raw,
+                };
             }
-
-            // Decode the data.
-            let mut value = Unspecified::default_of(&field.typing);
-            if field_format.is_structured() {
-                let header = reader.read_data()?;
-                value.decode(reader, Some(header))?;
-            } else {
-                value.decode(reader, None)?;
-            }
-
-            fields.insert(field.name.clone(), value);
         }
-
-        // Skip any remaining blob data.
-        if remaining_blob != 0 {
-            reader.skip_blob(remaining_blob as usize)?;
-        }
-
-        // Skip any remaining data fields.
-        for _ in 0..remaining_fields {
-            reader.skip_data()?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Decodable for DynamicListValue {
-    fn decode(
-        &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
-        header: Option<DataHeader>,
-    ) -> Result<(), CodecError> {
-        let header = Self::ensure_header(header, &[0])?;
-
-        // To mitigate repeat allocations, reserve
-        // space for any elements in excess of this
-        // vector's current capacity.
-        let count = header.count as usize;
-        if self.values.capacity() < count {
-            self.values.reserve_exact(count - self.values.capacity());
-        }
-        self.values.clear();
-
-        // Decode all elements.
-        let value = Unspecified::default_of(&self.typing);
-        for _ in 0..count {
-            let mut value = value.clone();
-            if self.typing.format().is_structured() {
-                let header = reader.read_data()?;
-                value.decode(reader, Some(header))?;
-            } else {
-                value.decode(reader, None)?;
-            }
-            self.values.push(value);
-        }
-
-        Ok(())
-    }
-}
-
-impl Decodable for DynamicMapValue {
-    fn decode(
-        &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
-        header: Option<DataHeader>,
-    ) -> Result<(), CodecError> {
-        let _ = Self::ensure_header(header, &[0])?;
-
-        reader.read_data_into(&mut self.keys)?;
-        reader.read_data_into(&mut self.values)?;
 
         Ok(())
     }
@@ -454,32 +524,26 @@ impl serde::Serialize for Unspecified {
             Unspecified::F64(v) => v.serialize(serializer),
             Unspecified::Bool(v) => v.serialize(serializer),
             Unspecified::Text(v) => v.serialize(serializer),
-            Unspecified::Data(v) => {
-                use serde::ser::SerializeMap;
-                let mut map = serializer.serialize_map(None)?;
-                for (field, value) in v.iter() {
-                    match value {
-                        Some(val) => map.serialize_entry(&field.name, val)?,
-                        Option::None => map.serialize_entry(&field.name, &())?,
-                    }
-                }
-                map.end()
-            }
-            Unspecified::List(v) => {
+            Unspecified::List(items) => {
                 use serde::ser::SerializeSeq;
-                let mut seq = serializer.serialize_seq(Some(v.len() as usize))?;
-                for elem in v.iter() {
+                let mut seq = serializer.serialize_seq(Some(items.len()))?;
+                for elem in items {
                     seq.serialize_element(elem)?;
                 }
                 seq.end()
             }
-            Unspecified::Map(v) => {
+            Unspecified::Map { keys, values } => {
                 use serde::ser::SerializeMap;
-                let mut map = serializer.serialize_map(Some(v.keys.len() as usize))?;
-                for (key, value) in v.keys.iter().zip(v.values.iter()) {
+                let mut map = serializer.serialize_map(Some(keys.len()))?;
+                for (key, value) in keys.iter().zip(values.iter()) {
                     map.serialize_entry(key, value)?;
                 }
                 map.end()
+            }
+            Unspecified::Data { .. } => {
+                // Typed data doesn't have a meaningful JSON representation;
+                // serialize as unit.
+                serializer.serialize_unit()
             }
         }
     }
@@ -537,7 +601,12 @@ impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
     }
 
     fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        Ok(Unspecified::U64(v))
+        // Normalize to I64 when value fits, for JSON integer interop.
+        if let Ok(i) = i64::try_from(v) {
+            Ok(Unspecified::I64(i))
+        } else {
+            Ok(Unspecified::U64(v))
+        }
     }
 
     fn visit_i8<E: serde::de::Error>(self, v: i8) -> Result<Self::Value, E> {
@@ -573,137 +642,150 @@ impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
     }
 
     fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        // @caer: TODO: This approach will capture any possible data in a single pass, but will
-        // lead to a bloated schema (i.e., the list will be typed as `List(Unspecified)` instead of a more specific type like `List(U32)`).
-        // To mitigate this, we could implement some heuristics to try to infer a more specific type for the list based on the types of its elements.
-        // For example, if all elements are integers, we could infer that the list has type `List(I64)`.
-        let mut list = DynamicListValue::new(&Type::Unspecified);
+        let mut items = Vec::new();
         while let Some(elem) = seq.next_element::<Unspecified>()? {
-            list.push(elem);
+            items.push(elem);
         }
-        Ok(Unspecified::List(list))
+        Ok(Unspecified::List(items))
     }
 
     fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        // @caer: TODO: Similar to the above, this approach will capture any possible data in a single pass, but will lead to a bloated schema
-        // (i.e., the map will be typed as `Map((Unspecified, Unspecified))` instead of a more specific type like `Map((Text, U32))`).
-        let mut map_value = DynamicMapValue::new(&(Type::Unspecified, Type::Unspecified));
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
         while let Some((key, value)) = map.next_entry::<Unspecified, Unspecified>()? {
-            map_value.keys.push(key);
-            map_value.values.push(value);
+            keys.push(key);
+            values.push(value);
         }
-        Ok(Unspecified::Map(map_value))
+        Ok(Unspecified::Map { keys, values })
     }
-}
-
-mod macros {
-    /// Macro which generates match expressions
-    /// for all possible value types of [`Unspecified`].
-    macro_rules! match_values {
-        (
-            $enum_var:ident,
-            $value_var:ident,
-            $value_expr:expr
-        ) => {
-            match $enum_var {
-                Unspecified::None => unreachable!("None handled before macro dispatch"),
-                Unspecified::U8($value_var) => $value_expr,
-                Unspecified::I8($value_var) => $value_expr,
-                Unspecified::U16($value_var) => $value_expr,
-                Unspecified::I16($value_var) => $value_expr,
-                Unspecified::U32($value_var) => $value_expr,
-                Unspecified::I32($value_var) => $value_expr,
-                Unspecified::U64($value_var) => $value_expr,
-                Unspecified::I64($value_var) => $value_expr,
-                Unspecified::F32($value_var) => $value_expr,
-                Unspecified::F64($value_var) => $value_expr,
-                Unspecified::Bool($value_var) => $value_expr,
-                Unspecified::Text($value_var) => $value_expr,
-                Unspecified::Data($value_var) => $value_expr,
-                Unspecified::List($value_var) => $value_expr,
-                Unspecified::Map($value_var) => $value_expr,
-            }
-        };
-    }
-
-    // Re-export macros for use in outer module.
-    pub(crate) use match_values;
 }
 
 #[cfg(test)]
 mod tests {
     use crate::codec::ReadsDecodable;
 
-    use super::super::tests::{NestedTestData, TestData};
-
     use super::*;
 
     #[test]
-    pub fn dynamic_codes() -> Result<(), CodecError> {
-        let test_data_type = TestData::typing();
+    pub fn scalar_round_trips() -> Result<(), CodecError> {
+        // Test scalar round-trips.
+        let cases: Vec<Unspecified> = alloc::vec![
+            Unspecified::U8(42),
+            Unspecified::I8(-7),
+            Unspecified::U16(1000),
+            Unspecified::I16(-500),
+            Unspecified::U32(100_000),
+            Unspecified::I32(-50_000),
+            Unspecified::U64(1_000_000),
+            Unspecified::I64(-999_999),
+            Unspecified::F32(3.14),
+            Unspecified::F64(2.718281828),
+            Unspecified::Bool(true),
+            Unspecified::Bool(false),
+            Unspecified::Text("hello world".into()),
+            Unspecified::Text("".into()),
+        ];
 
-        // Create some test data using non-dynamic APIs.
-        let test_data_static = TestData {
+        for original in &cases {
+            let mut bytes = alloc::vec![];
+            bytes.write_data(original)?;
+
+            let mut decoded = Unspecified::None;
+            let header: DataHeader = (&mut bytes.as_slice()).read_data()?;
+            decoded.decode(&mut bytes.as_slice().split_at(8).1, Some(header))?;
+
+            // Simpler: use read_data_into
+            let mut decoded2 = Unspecified::None;
+            (&mut bytes.as_slice()).read_data_into(&mut decoded2)?;
+
+            assert_eq!(*original, decoded2, "round-trip failed for {original:?}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn list_round_trips() -> Result<(), CodecError> {
+        let original = Unspecified::List(alloc::vec![
+            Unspecified::I32(1),
+            Unspecified::Text("two".into()),
+            Unspecified::Bool(true),
+        ]);
+
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&original)?;
+
+        let mut decoded = Unspecified::None;
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+
+        assert_eq!(original, decoded);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn map_round_trips() -> Result<(), CodecError> {
+        let original = Unspecified::Map {
+            keys: alloc::vec![Unspecified::Text("a".into()), Unspecified::Text("b".into()),],
+            values: alloc::vec![Unspecified::I32(1), Unspecified::Bool(true)],
+        };
+
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&original)?;
+
+        let mut decoded = Unspecified::None;
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+
+        assert_eq!(original, decoded);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn typed_round_trips() -> Result<(), CodecError> {
+        use super::super::tests::{NestedTestData, TestData};
+
+        // Encode typed data.
+        let test_data = TestData {
             number: 1,
             floaty: 60.90,
-            text_list: vec!["one".into(), "two".into()],
+            text_list: alloc::vec!["one".into(), "two".into()],
             text: "hello".into(),
             nested: NestedTestData { boolean: true },
-            two_d: vec![
-                vec!["three".into(), "four".into()],
-                vec!["five".into(), "six".into()],
+            two_d: alloc::vec![
+                alloc::vec!["three".into(), "four".into()],
+                alloc::vec!["five".into(), "six".into()],
             ],
         };
-        let mut test_bytes_static = vec![];
-        test_bytes_static.write_data(&test_data_static)?;
+        let mut static_bytes = alloc::vec![];
+        static_bytes.write_data(&test_data)?;
 
-        // Create some test data using dynamic APIs.
-        let mut test_data_dynamic = DynamicDataValue::new(&test_data_type);
-        test_data_dynamic.insert("number".into(), Unspecified::I32(1));
-        test_data_dynamic.insert("floaty".into(), Unspecified::F64(60.90));
-        let mut test_data_dynamic_list = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list.push(Unspecified::Text("one".into()));
-        test_data_dynamic_list.push(Unspecified::Text("two".into()));
-        test_data_dynamic.insert(
-            "text_list".into(),
-            Unspecified::List(test_data_dynamic_list),
+        // Decode as Unspecified (should capture as Data).
+        let mut decoded = Unspecified::None;
+        (&mut static_bytes.as_slice()).read_data_into(&mut decoded)?;
+        assert!(matches!(decoded, Unspecified::Data { .. }));
+
+        // Re-encode the Unspecified::Data and verify bytes match.
+        let mut re_encoded = alloc::vec![];
+        re_encoded.write_data(&decoded)?;
+        assert_eq!(
+            static_bytes, re_encoded,
+            "typed round-trip bytes must match"
         );
-        test_data_dynamic.insert("text".into(), Unspecified::Text("hello".into()));
-        let mut test_data_dynamic_nested = DynamicDataValue::new(&NestedTestData::typing());
-        test_data_dynamic_nested.insert("boolean".into(), Unspecified::Bool(true));
-        test_data_dynamic.insert("nested".into(), Unspecified::Data(test_data_dynamic_nested));
-        let mut test_data_dynamic_two_d = DynamicListValue::new(&Type::List(Type::Text.into()));
-        let mut test_data_dynamic_list_a = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list_a.push(Unspecified::Text("three".into()));
-        test_data_dynamic_list_a.push(Unspecified::Text("four".into()));
-        test_data_dynamic_two_d.push(Unspecified::List(test_data_dynamic_list_a));
-        let mut test_data_dynamic_list_b = DynamicListValue::new(&Type::Text);
-        test_data_dynamic_list_b.push(Unspecified::Text("five".into()));
-        test_data_dynamic_list_b.push(Unspecified::Text("six".into()));
-        test_data_dynamic_two_d.push(Unspecified::List(test_data_dynamic_list_b));
-        test_data_dynamic.insert("two_d".into(), Unspecified::List(test_data_dynamic_two_d));
-        let mut test_bytes_dynamic = vec![];
-        test_bytes_dynamic.write_data(&test_data_dynamic)?;
 
-        // The two datas' format headers should be identical.
-        let mut test_data_static_header = vec![];
-        test_data_static.encode_header(&mut test_data_static_header)?;
-        let mut test_data_dynamic_header = vec![];
-        test_data_dynamic.encode_header(&mut test_data_dynamic_header)?;
-        assert_eq!(test_data_static_header, test_data_dynamic_header);
+        // Verify the re-encoded bytes decode back to the original typed data.
+        let roundtripped: TestData = re_encoded.as_slice().read_data()?;
+        assert_eq!(test_data, roundtripped);
 
-        // The two encoded sets of bytes should be identical.
-        assert_eq!(test_bytes_static, test_bytes_dynamic);
+        Ok(())
+    }
 
-        // Check that the dynamic data decodes into static data correctly.
-        let static_from_dynamic = test_bytes_dynamic.as_slice().read_data()?;
-        assert_eq!(test_data_static, static_from_dynamic);
-
-        // Check that the static data decodes into dynamic data correctly.
-        let mut dynamic_from_static = DynamicDataValue::new(&test_data_type);
-        (&mut test_bytes_static.as_slice()).read_data_into(&mut dynamic_from_static)?;
-        assert_eq!(test_data_dynamic, dynamic_from_static);
-
+    #[test]
+    pub fn none_is_zero_bytes() -> Result<(), CodecError> {
+        let none = Unspecified::None;
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&none)?;
+        assert_eq!(0, bytes.len(), "None should encode to 0 bytes");
         Ok(())
     }
 }

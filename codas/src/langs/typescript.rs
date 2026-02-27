@@ -149,11 +149,9 @@ pub fn generate_types(coda: &Coda, stream: &mut impl Writes) -> Result<(), Strea
     let _ = write!(writer, "}}\n\n");
 
     // Generate data interfaces.
-    for (ordinal, data_type) in [Unspecified::DATA_TYPE]
-        .iter()
-        .chain(coda.iter())
-        .enumerate()
-    {
+    for data_type in [Unspecified::DATA_TYPE].iter().chain(coda.iter()) {
+        let ordinal = data_type.format().as_data_format().ordinal;
+
         // Declaration and ordinal.
         let data_type_name = &data_type.name;
         let _ = writedoc!(

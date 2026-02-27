@@ -12,8 +12,8 @@ use core::convert::Infallible;
 use alloc::{boxed::Box, vec, vec::Vec};
 
 use crate::codec::{
-    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, FormatMetadata,
-    ReadsDecodable, WritesEncodable,
+    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    WritesEncodable,
 };
 
 pub mod binary;
@@ -25,6 +25,11 @@ pub mod number;
 mod text;
 pub use dynamic::Unspecified;
 pub use text::*;
+
+use dynamic::{
+    ORD_BOOL, ORD_DATA, ORD_F32, ORD_F64, ORD_I16, ORD_I32, ORD_I64, ORD_I8, ORD_LIST, ORD_MAP,
+    ORD_NONE, ORD_TEXT, ORD_U16, ORD_U32, ORD_U64, ORD_U8,
+};
 
 /// Enumeration of available built in types.
 #[non_exhaustive]
@@ -96,9 +101,9 @@ impl Type {
             // Maps are formatted as a list of keys
             // followed by a list of values.
             Type::Map(..) => DataFormat {
-                ordinal: 0,
                 blob_size: 0,
                 data_fields: 2,
+                ordinal: 0,
             }
             .as_format(),
         }
@@ -214,7 +219,7 @@ impl DataType {
     pub fn new(
         name: Text,
         docs: Option<Text>,
-        ordinal: FormatMetadata,
+        ordinal: u8,
         blob_fields: &[DataField],
         data_fields: &[DataField],
     ) -> Self {
@@ -366,37 +371,37 @@ impl Encodable for Type {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         let ordinal = match self {
-            Type::Unspecified => 0u16,
-            Type::U8 => 1u16,
-            Type::U16 => 2u16,
-            Type::U32 => 3u16,
-            Type::U64 => 4u16,
-            Type::I8 => 5u16,
-            Type::I16 => 6u16,
-            Type::I32 => 7u16,
-            Type::I64 => 8u16,
-            Type::F32 => 9u16,
-            Type::F64 => 10u16,
-            Type::Bool => 11u16,
-            Type::Text => 12u16,
+            Type::Unspecified => ORD_NONE,
+            Type::U8 => ORD_U8,
+            Type::U16 => ORD_U16,
+            Type::U32 => ORD_U32,
+            Type::U64 => ORD_U64,
+            Type::I8 => ORD_I8,
+            Type::I16 => ORD_I16,
+            Type::I32 => ORD_I32,
+            Type::I64 => ORD_I64,
+            Type::F32 => ORD_F32,
+            Type::F64 => ORD_F64,
+            Type::Bool => ORD_BOOL,
+            Type::Text => ORD_TEXT,
             Type::Data(..) => {
                 return DataHeader {
                     count: 1,
-                    format: Format::data(13u16).with(Type::FORMAT).as_data_format(),
+                    format: Format::data(ORD_DATA).with(Type::FORMAT).as_data_format(),
                 }
                 .encode(writer);
             }
             Type::List { .. } => {
                 return DataHeader {
                     count: 1,
-                    format: Format::data(14u16).with(Type::FORMAT).as_data_format(),
+                    format: Format::data(ORD_LIST).with(Type::FORMAT).as_data_format(),
                 }
                 .encode(writer);
             }
             Type::Map { .. } => {
                 return DataHeader {
                     count: 1,
-                    format: Format::data(15u16).with(Type::FORMAT).as_data_format(),
+                    format: Format::data(ORD_MAP).with(Type::FORMAT).as_data_format(),
                 }
                 .encode(writer);
             }
@@ -419,62 +424,62 @@ impl Decodable for Type {
         let header = Self::ensure_header(
             header,
             &[
-                0u16, 1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16,
-                13u16, 14u16, 15u16,
+                ORD_NONE, ORD_U8, ORD_U16, ORD_U32, ORD_U64, ORD_I8, ORD_I16, ORD_I32, ORD_I64,
+                ORD_F32, ORD_F64, ORD_BOOL, ORD_TEXT, ORD_DATA, ORD_LIST, ORD_MAP,
             ],
         )?;
 
         match header.format.ordinal {
-            0u16 => {
+            ORD_NONE => {
                 *self = Type::Unspecified;
             }
-            1u16 => {
+            ORD_U8 => {
                 *self = Type::U8;
             }
-            2u16 => {
+            ORD_U16 => {
                 *self = Type::U16;
             }
-            3u16 => {
+            ORD_U32 => {
                 *self = Type::U32;
             }
-            4u16 => {
+            ORD_U64 => {
                 *self = Type::U64;
             }
-            5u16 => {
+            ORD_I8 => {
                 *self = Type::I8;
             }
-            6u16 => {
+            ORD_I16 => {
                 *self = Type::I16;
             }
-            7u16 => {
+            ORD_I32 => {
                 *self = Type::I32;
             }
-            8u16 => {
+            ORD_I64 => {
                 *self = Type::I64;
             }
-            9u16 => {
+            ORD_F32 => {
                 *self = Type::F32;
             }
-            10u16 => {
+            ORD_F64 => {
                 *self = Type::F64;
             }
-            11u16 => {
+            ORD_BOOL => {
                 *self = Type::Bool;
             }
-            12u16 => {
+            ORD_TEXT => {
                 *self = Type::Text;
             }
-            13u16 => {
+            ORD_DATA => {
                 let mut typing = DataType::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::Data(typing);
             }
-            14u16 => {
+            ORD_LIST => {
                 let mut typing = Type::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::List(typing.into());
             }
-            15u16 => {
+            ORD_MAP => {
                 let mut key_typing = Type::default();
                 reader.read_data_into(&mut key_typing)?;
                 let mut value_typing = Type::default();
@@ -513,7 +518,7 @@ impl Decodable for Coda {
         reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), crate::codec::CodecError> {
-        let _ = Self::ensure_header(header, &[0u16])?;
+        let _ = Self::ensure_header(header, &[0])?;
 
         reader.read_data_into(&mut self.global_name)?;
         reader.read_data_into(&mut self.local_name)?;

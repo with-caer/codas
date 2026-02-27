@@ -119,7 +119,7 @@ pub fn unspecified_map_via_json() {
         .insert("user".into(), Unspecified::Text("alice".into()));
     example
         .request_data
-        .insert("age".into(), Unspecified::U64(30));
+        .insert("age".into(), Unspecified::I64(30));
     example
         .request_data
         .insert("active".into(), Unspecified::Bool(true));
@@ -188,7 +188,7 @@ pub fn unspecified_map_from_arbitrary_json() {
     // Nested object — deserialized as Unspecified::Map.
     let metadata = example.request_data.get(&Text::from("metadata"));
     assert!(
-        matches!(metadata, Some(Unspecified::Map(..))),
+        matches!(metadata, Some(Unspecified::Map { .. })),
         "expected Map, got {metadata:?}"
     );
 

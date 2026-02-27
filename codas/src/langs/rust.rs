@@ -157,7 +157,7 @@ pub fn generate_types(
             }}
 
             impl codas::types::TryAsFormat<{struct_fqn}> for {coda_type_name} {{
-                type Error = codas::codec::FormatMetadata;
+                type Error = u8;
 
                 fn try_as_format(&self) -> Result<&{struct_fqn}, Self::Error> {{
                     match self {{
@@ -273,7 +273,7 @@ pub fn generate_types(
 
     // `fn ordinal`
     coda_enum += "/// This variant's ordinal in the coda.\n";
-    coda_enum += "pub fn ordinal(&self) -> codas::codec::FormatMetadata {\n";
+    coda_enum += "pub fn ordinal(&self) -> u8 {\n";
     coda_enum += "match self {\n";
     for variant in enum_variant_ordinals {
         coda_enum += &variant;

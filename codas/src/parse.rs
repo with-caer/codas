@@ -34,8 +34,9 @@ pub fn parse(markdown: &str) -> Result<Coda, ParseError> {
 
     // Create data types.
     for (ordinal, parsed_data) in parsed_coda.data.into_iter().enumerate() {
-        // Ordinals are 1-indexed.
-        let ordinal = (ordinal + 1) as u16;
+        // User-defined ordinals start at 1 (0 reserved for Unspecified,
+        // 224-255 reserved for built-in system types).
+        let ordinal = (ordinal + 1) as u8;
 
         // Extract docs.
         let docs = if parsed_data.docs.is_empty() {

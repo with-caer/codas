@@ -79,7 +79,7 @@ pub enum TestData {
 }
 impl TestData {
     #[doc = " This variant\'s ordinal in the coda."]
-    pub fn ordinal(&self) -> codas::codec::FormatMetadata {
+    pub fn ordinal(&self) -> u8 {
         match self {
             Self::Unspecified(..) => 0,
             Self::TestMessage(..) => 1,

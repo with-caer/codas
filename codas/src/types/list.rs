@@ -3,8 +3,8 @@
 use alloc::vec::Vec;
 
 use crate::codec::{
-    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, FormatMetadata,
-    ReadsDecodable, WritesEncodable,
+    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    WritesEncodable,
 };
 
 impl Encodable for [u8] {
@@ -22,11 +22,11 @@ impl Encodable for [u8] {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         DataHeader {
-            count: self.len() as FormatMetadata,
+            count: self.len() as u32,
             format: DataFormat {
-                ordinal: 0,
                 blob_size: 1,
                 data_fields: 0,
+                ordinal: 0,
             },
         }
         .encode(writer)
@@ -56,7 +56,7 @@ where
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         DataHeader {
-            count: self.len() as FormatMetadata,
+            count: self.len() as u32,
             format: Self::FORMAT.as_data_format(),
         }
         .encode(writer)

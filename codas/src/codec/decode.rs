@@ -3,10 +3,7 @@ use snafu::ensure;
 
 use crate::{codec::UnsupportedDataFormatSnafu, stream::Reads};
 
-use super::{
-    encode::Encodable, CodecError, DataFormat, DataHeader, FormatMetadata,
-    UnexpectedDataFormatSnafu,
-};
+use super::{encode::Encodable, CodecError, DataFormat, DataHeader, UnexpectedDataFormatSnafu};
 
 /// Default size used for temporary,
 /// stack-allocated buffers.
@@ -37,7 +34,7 @@ pub trait Decodable: Encodable {
     #[inline(always)]
     fn ensure_header(
         header: Option<DataHeader>,
-        supported_ordinals: &[FormatMetadata],
+        supported_ordinals: &[u8],
     ) -> Result<DataHeader, CodecError> {
         // Extract header data.
         let header = header.ok_or_else(|| {

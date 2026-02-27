@@ -23,8 +23,7 @@ use snafu::Snafu;
 
 use crate::{
     codec::{
-        CodecError, DataHeader, Decodable, Encodable, Format, FormatMetadata, ReadsDecodable,
-        WritesEncodable,
+        CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable, WritesEncodable,
     },
     types::Text,
 };
@@ -33,7 +32,7 @@ use crate::{
 impl<const SIZE: usize> Encodable for [u8; SIZE] {
     /// Encoded as a [`Format::Data`] containing a
     /// [`Format::Blob(SIZE)`](Format::Blob).
-    const FORMAT: Format = Format::data(0).with(Format::Blob(SIZE as FormatMetadata));
+    const FORMAT: Format = Format::data(0).with(Format::Blob(SIZE as u16));
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         writer.write_all(self)?;
