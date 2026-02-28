@@ -2,7 +2,7 @@
 use alloc::vec::Vec;
 
 use crate::codec::{
-    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    self, CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
     WritesEncodable,
 };
 
@@ -221,7 +221,7 @@ impl Encodable for Unspecified {
 
             // Text: same wire format as Text::encode_header but with ORD_TEXT.
             Unspecified::Text(v) => DataHeader {
-                count: v.len() as u32,
+                count: codec::try_count(v.len())?,
                 format: DataFormat {
                     blob_size: 1,
                     data_fields: 0,
@@ -232,7 +232,7 @@ impl Encodable for Unspecified {
 
             // List: each item self-describes.
             Unspecified::List(items) => DataHeader {
-                count: items.len() as u32,
+                count: codec::try_count(items.len())?,
                 format: DataFormat {
                     blob_size: 0,
                     data_fields: 1,
@@ -270,7 +270,7 @@ fn encode_unspecified_list(
 ) -> Result<(), CodecError> {
     // Write list header.
     DataHeader {
-        count: items.len() as u32,
+        count: codec::try_count(items.len())?,
         format: DataFormat {
             blob_size: 0,
             data_fields: 1,
@@ -475,6 +475,13 @@ impl Decodable for Unspecified {
 
             // User-defined type — opaque capture.
             ordinal => {
+                if header.count != 1 {
+                    return Err(CodecError::UnsupportedCount {
+                        ordinal,
+                        count: header.count,
+                    });
+                }
+
                 let mut raw = Vec::new();
 
                 // Capture blob bytes.

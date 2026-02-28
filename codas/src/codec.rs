@@ -522,6 +522,16 @@ pub enum CodecError {
     #[snafu(display("expected to decode {count} more fields of data"))]
     MissingDataFields { count: u8 },
 
+    /// A sequence length exceeded the maximum
+    /// representable count ([`u32::MAX`]).
+    #[snafu(display("sequence length {length} exceeds maximum count ({})", u32::MAX))]
+    CountOverflow { length: usize },
+
+    /// A decoder encountered an unsupported count
+    /// for the given data format ordinal.
+    #[snafu(display("unsupported count {count} for data format (ordinal {ordinal})"))]
+    UnsupportedCount { ordinal: u8, count: u32 },
+
     /// An error occurred while reading or
     /// writing the underlying data stream.
     #[snafu(display("error when reading or writing from a data stream: {source}"))]
@@ -532,6 +542,14 @@ impl From<StreamError> for CodecError {
     fn from(value: StreamError) -> Self {
         Self::Stream { source: value }
     }
+}
+
+/// Converts a `usize` length to a `u32` count,
+/// returning [`CodecError::CountOverflow`] if it
+/// exceeds [`u32::MAX`].
+#[inline]
+pub fn try_count(length: usize) -> Result<u32, CodecError> {
+    u32::try_from(length).map_err(|_| CodecError::CountOverflow { length })
 }
 
 #[cfg(test)]
