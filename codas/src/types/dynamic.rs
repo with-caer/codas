@@ -22,9 +22,9 @@ use super::Text;
 /// instead of something like `Null` or `Void`.
 #[derive(Default, Debug, Clone, PartialEq)]
 pub enum Unspecified {
-    /// No value.
+    /// The default value of unspecified data.
     #[default]
-    None,
+    Default,
 
     U8(u8),
     I8(i8),
@@ -62,7 +62,7 @@ pub enum Unspecified {
 /// User-defined ordinals start at 1 (low end).
 /// Both ranges grow toward the middle, maximizing the gap.
 /// Ordinal 0 = Unspecified/None.
-pub(crate) const ORD_NONE: u8 = 0;
+pub(crate) const ORD_DEFAULT: u8 = 0;
 pub(crate) const ORD_U8: u8 = 255;
 pub(crate) const ORD_U16: u8 = 254;
 pub(crate) const ORD_U32: u8 = 253;
@@ -91,7 +91,7 @@ impl Unspecified {
     /// Returns the default value of a `typing`.
     pub fn default_of(typing: &super::Type) -> Unspecified {
         match typing {
-            super::Type::Unspecified => Unspecified::None,
+            super::Type::Unspecified => Unspecified::Default,
             super::Type::U8 => Unspecified::U8(0),
             super::Type::I8 => Unspecified::I8(0),
             super::Type::U16 => Unspecified::U16(0),
@@ -119,7 +119,7 @@ impl Unspecified {
     /// Returns the type-tag ordinal for this value.
     fn type_ordinal(&self) -> u8 {
         match self {
-            Unspecified::None => ORD_NONE,
+            Unspecified::Default => ORD_DEFAULT,
             Unspecified::U8(_) => ORD_U8,
             Unspecified::I8(_) => ORD_I8,
             Unspecified::U16(_) => ORD_U16,
@@ -158,7 +158,8 @@ impl Encodable for Unspecified {
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         match self {
-            Unspecified::None => Ok(()),
+            // count=0: no payload follows.
+            Unspecified::Default => Ok(()),
             Unspecified::U8(v) => v.encode(writer),
             Unspecified::I8(v) => v.encode(writer),
             Unspecified::U16(v) => v.encode(writer),
@@ -196,7 +197,7 @@ impl Encodable for Unspecified {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         match self {
-            Unspecified::None => Ok(()),
+            Unspecified::Default => DataHeader::default().encode(writer),
 
             // Scalars: header with type-tagged ordinal.
             Unspecified::U8(_)
@@ -339,13 +340,13 @@ impl Decodable for Unspecified {
             None => {
                 // No header means we were called in a blob context.
                 // This shouldn't happen for self-describing Unspecified.
-                *self = Unspecified::None;
+                *self = Unspecified::Default;
                 return Ok(());
             }
         };
 
         match header.format.ordinal {
-            ORD_NONE => {
+            ORD_DEFAULT => {
                 // Skip any data that might be present.
                 for _ in 0..header.count {
                     reader.skip_blob(header.format.blob_size as usize)?;
@@ -353,7 +354,7 @@ impl Decodable for Unspecified {
                         reader.skip_data()?;
                     }
                 }
-                *self = Unspecified::None;
+                *self = Unspecified::Default;
             }
 
             ORD_U8 => {
@@ -435,13 +436,13 @@ impl Decodable for Unspecified {
                     if header.format.data_fields > 0 {
                         // Each item is self-describing (has its own header).
                         let item_header: DataHeader = reader.read_data()?;
-                        let mut item = Unspecified::None;
+                        let mut item = Unspecified::Default;
                         item.decode(reader, Some(item_header))?;
                         items.push(item);
                     } else {
                         // Items are blobs without individual headers.
                         reader.skip_blob(header.format.blob_size as usize)?;
-                        items.push(Unspecified::None);
+                        items.push(Unspecified::Default);
                     }
                 }
                 *self = Unspecified::List(items);
@@ -449,11 +450,11 @@ impl Decodable for Unspecified {
 
             ORD_MAP => {
                 // Read two sub-lists (keys, values).
-                let mut keys = Unspecified::None;
+                let mut keys = Unspecified::Default;
                 let keys_header: DataHeader = reader.read_data()?;
                 keys.decode(reader, Some(keys_header))?;
 
-                let mut values = Unspecified::None;
+                let mut values = Unspecified::Default;
                 let values_header: DataHeader = reader.read_data()?;
                 values.decode(reader, Some(values_header))?;
 
@@ -518,7 +519,7 @@ impl Decodable for Unspecified {
 impl serde::Serialize for Unspecified {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            Unspecified::None => serializer.serialize_unit(),
+            Unspecified::Default => serializer.serialize_unit(),
             Unspecified::U8(v) => v.serialize(serializer),
             Unspecified::I8(v) => v.serialize(serializer),
             Unspecified::U16(v) => v.serialize(serializer),
@@ -577,11 +578,11 @@ impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
     }
 
     fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(Unspecified::None)
+        Ok(Unspecified::Default)
     }
 
     fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(Unspecified::None)
+        Ok(Unspecified::Default)
     }
 
     fn visit_some<D: serde::Deserializer<'de>>(
@@ -697,12 +698,12 @@ mod tests {
             let mut bytes = alloc::vec![];
             bytes.write_data(original)?;
 
-            let mut decoded = Unspecified::None;
+            let mut decoded = Unspecified::Default;
             let header: DataHeader = (&mut bytes.as_slice()).read_data()?;
             decoded.decode(&mut bytes.as_slice().split_at(8).1, Some(header))?;
 
             // Simpler: use read_data_into
-            let mut decoded2 = Unspecified::None;
+            let mut decoded2 = Unspecified::Default;
             (&mut bytes.as_slice()).read_data_into(&mut decoded2)?;
 
             assert_eq!(*original, decoded2, "round-trip failed for {original:?}");
@@ -722,7 +723,7 @@ mod tests {
         let mut bytes = alloc::vec![];
         bytes.write_data(&original)?;
 
-        let mut decoded = Unspecified::None;
+        let mut decoded = Unspecified::Default;
         (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
 
         assert_eq!(original, decoded);
@@ -740,7 +741,7 @@ mod tests {
         let mut bytes = alloc::vec![];
         bytes.write_data(&original)?;
 
-        let mut decoded = Unspecified::None;
+        let mut decoded = Unspecified::Default;
         (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
 
         assert_eq!(original, decoded);
@@ -768,7 +769,7 @@ mod tests {
         static_bytes.write_data(&test_data)?;
 
         // Decode as Unspecified (should capture as Data).
-        let mut decoded = Unspecified::None;
+        let mut decoded = Unspecified::Default;
         (&mut static_bytes.as_slice()).read_data_into(&mut decoded)?;
         assert!(matches!(decoded, Unspecified::Data { .. }));
 
@@ -788,11 +789,40 @@ mod tests {
     }
 
     #[test]
-    pub fn none_is_zero_bytes() -> Result<(), CodecError> {
-        let none = Unspecified::None;
+    pub fn list_with_default_round_trips() -> Result<(), CodecError> {
+        let original = Unspecified::List(alloc::vec![
+            Unspecified::Default,
+            Unspecified::I32(42),
+            Unspecified::Default,
+        ]);
+
         let mut bytes = alloc::vec![];
-        bytes.write_data(&none)?;
-        assert_eq!(0, bytes.len(), "None should encode to 0 bytes");
+        bytes.write_data(&original)?;
+
+        let mut decoded = Unspecified::Default;
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+
+        assert_eq!(original, decoded);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn default_encodes_as_zero_header() -> Result<(), CodecError> {
+        let value = Unspecified::Default;
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&value)?;
+        assert_eq!(8, bytes.len(), "Default should encode as one 8-byte header");
+        assert!(
+            bytes.iter().all(|&b| b == 0),
+            "Default header should be all zeros"
+        );
+
+        // Round-trip.
+        let mut decoded = Unspecified::U8(0xFF);
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+        assert_eq!(Unspecified::Default, decoded);
+
         Ok(())
     }
 }

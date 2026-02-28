@@ -95,13 +95,13 @@ pub fn unspecified_map_via_rust() {
         Some(&Unspecified::Bool(true))
     );
 
-    // None represents absent data.
+    // Default represents the null/default value.
     example
         .request_data
-        .insert("empty".into(), Unspecified::None);
+        .insert("empty".into(), Unspecified::Default);
     assert_eq!(
         example.request_data.get(&Text::from("empty")),
-        Some(&Unspecified::None)
+        Some(&Unspecified::Default)
     );
 
     // Wrap in the coda enum.

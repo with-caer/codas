@@ -27,8 +27,8 @@ pub use dynamic::Unspecified;
 pub use text::*;
 
 use dynamic::{
-    ORD_BOOL, ORD_DATA, ORD_F32, ORD_F64, ORD_I16, ORD_I32, ORD_I64, ORD_I8, ORD_LIST, ORD_MAP,
-    ORD_NONE, ORD_TEXT, ORD_U16, ORD_U32, ORD_U64, ORD_U8,
+    ORD_BOOL, ORD_DATA, ORD_DEFAULT, ORD_F32, ORD_F64, ORD_I16, ORD_I32, ORD_I64, ORD_I8, ORD_LIST,
+    ORD_MAP, ORD_TEXT, ORD_U16, ORD_U32, ORD_U64, ORD_U8,
 };
 
 /// Enumeration of available built in types.
@@ -380,7 +380,7 @@ impl Encodable for Type {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         let ordinal = match self {
-            Type::Unspecified => ORD_NONE,
+            Type::Unspecified => ORD_DEFAULT,
             Type::U8 => ORD_U8,
             Type::U16 => ORD_U16,
             Type::U32 => ORD_U32,
@@ -433,13 +433,27 @@ impl Decodable for Type {
         let header = Self::ensure_header(
             header,
             &[
-                ORD_NONE, ORD_U8, ORD_U16, ORD_U32, ORD_U64, ORD_I8, ORD_I16, ORD_I32, ORD_I64,
-                ORD_F32, ORD_F64, ORD_BOOL, ORD_TEXT, ORD_DATA, ORD_LIST, ORD_MAP,
+                ORD_DEFAULT,
+                ORD_U8,
+                ORD_U16,
+                ORD_U32,
+                ORD_U64,
+                ORD_I8,
+                ORD_I16,
+                ORD_I32,
+                ORD_I64,
+                ORD_F32,
+                ORD_F64,
+                ORD_BOOL,
+                ORD_TEXT,
+                ORD_DATA,
+                ORD_LIST,
+                ORD_MAP,
             ],
         )?;
 
         match header.format.ordinal {
-            ORD_NONE => {
+            ORD_DEFAULT => {
                 *self = Type::Unspecified;
             }
             ORD_U8 => {
