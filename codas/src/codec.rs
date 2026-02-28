@@ -492,6 +492,7 @@ impl Decodable for DataHeader {
 /// Enumeration of errors that may occur while
 /// encoding or decoding data.
 #[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
 pub enum CodecError {
     /// An encoder was asked to encode a blob
     /// as structured data.

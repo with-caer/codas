@@ -13,7 +13,7 @@ use alloc::{boxed::Box, vec, vec::Vec};
 
 use crate::codec::{
     CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
-    WritesEncodable,
+    UnexpectedDataFormatSnafu, WritesEncodable,
 };
 
 pub mod binary;
@@ -274,15 +274,24 @@ impl DataType {
         }
 
         let field_format = field.typing.format();
-        self.format = self.format.with(field_format);
-        match field_format {
-            Format::Blob(..) => {
-                self.blob_fields.push(field);
-            }
-            Format::Data(..) | Format::Fluid => {
-                self.data_fields.push(field);
-            }
-        };
+
+        // Optional fields are wrapped into a data field
+        // so they get a header for presence signaling.
+        if field.optional {
+            let boxed_format = Format::data(0).with(field_format);
+            self.format = self.format.with(boxed_format);
+            self.data_fields.push(field);
+        } else {
+            self.format = self.format.with(field_format);
+            match field_format {
+                Format::Blob(..) => {
+                    self.blob_fields.push(field);
+                }
+                Format::Data(..) | Format::Fluid => {
+                    self.data_fields.push(field);
+                }
+            };
+        }
 
         self
     }
@@ -603,57 +612,54 @@ impl<T> Encodable for Option<T>
 where
     T: Default + Encodable + 'static,
 {
-    /// Options are a semantic feature that's not
-    /// technically encoded: Optional data encodes
-    /// identically to "not optional" data. In the
-    /// case of `None`, data is encoded and decoded
-    /// as its default value.
-    const FORMAT: Format = T::FORMAT;
+    const FORMAT: Format = Format::data(0).with(T::FORMAT);
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        match &self {
-            Some(value) => {
-                value.encode(writer)?;
-            }
-
-            None => {
-                Self::FORMAT.encode_default_value(writer)?;
-            }
+        match self {
+            None => Ok(()),
+            Some(value) => writer.write_data(value),
         }
-
-        Ok(())
     }
 
     fn encode_header(
         &self,
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
-        match &self {
-            Some(value) => value.encode_header(writer),
-            None => Self::FORMAT.encode_default_header(writer),
+        DataHeader {
+            count: if self.is_some() { 1 } else { 0 },
+            format: if self.is_some() {
+                Self::FORMAT.as_data_format()
+            } else {
+                DataFormat::default()
+            },
         }
+        .encode(writer)
     }
 }
 
 impl<T> Decodable for Option<T>
 where
-    T: Decodable + Default + PartialEq + 'static,
+    T: Decodable + Default + 'static,
 {
     fn decode(
         &mut self,
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let mut decoded = T::default();
-        decoded.decode(reader, header)?;
+        let h = header.ok_or_else(|| {
+            UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: None::<DataHeader>,
+            }
+            .build()
+        })?;
 
-        // TODO: It'd be better if we could detect "defaulty-ness"
-        //       during the decoding step, so that we're not having
-        //       to manually compare a decoded value to its default.
-        if decoded == T::default() {
+        if h == DataHeader::default() {
             *self = None;
         } else {
-            *self = Some(decoded);
+            let mut value = T::default();
+            reader.read_data_into(&mut value)?;
+            *self = Some(value);
         }
 
         Ok(())
@@ -857,12 +863,12 @@ mod tests {
         let decoded_option = data.as_slice().read_data().expect("decoded");
         assert_eq!(option, decoded_option);
 
-        // Do default values decode as None?
+        // Default values round-trip as Some(default).
         let option: Option<u32> = Some(0);
         let mut data = vec![];
         data.write_data(&option).expect("encoded");
         let decoded_option: Option<u32> = data.as_slice().read_data().expect("decoded");
-        assert_eq!(None, decoded_option);
+        assert_eq!(Some(0), decoded_option);
     }
 
     #[test]
@@ -881,11 +887,66 @@ mod tests {
         let decoded_option = data.as_slice().read_data().expect("decoded");
         assert_eq!(option, decoded_option);
 
-        // Do default values decode as None?
+        // Default values round-trip as Some(default).
         let option: Option<Text> = Some("".into());
         let mut data = vec![];
         data.write_data(&option).expect("encoded");
         let decoded_option: Option<Text> = data.as_slice().read_data().expect("decoded");
-        assert_eq!(None, decoded_option);
+        assert_eq!(Some("".into()), decoded_option);
+    }
+
+    #[test]
+    fn codes_nested_optionals() {
+        // None
+        let option: Option<Option<u32>> = None;
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(None)
+        let option: Option<Option<u32>> = Some(None);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(Some(0)) — the previously unrepresentable case
+        let option: Option<Option<u32>> = Some(Some(0));
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(Some(42))
+        let option: Option<Option<u32>> = Some(Some(42));
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+    }
+
+    #[test]
+    fn codes_optional_vec() {
+        // None
+        let option: Option<Vec<u16>> = None;
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(vec![])
+        let option: Option<Vec<u16>> = Some(vec![]);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(vec![42])
+        let option: Option<Vec<u16>> = Some(vec![42]);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
     }
 }
