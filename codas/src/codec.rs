@@ -130,6 +130,7 @@ use crate::stream::StreamError;
 // while keeping them in separate files to reduce clutter.
 mod decode;
 mod encode;
+pub(crate) use decode::DecodingScope;
 pub use decode::*;
 pub use encode::*;
 

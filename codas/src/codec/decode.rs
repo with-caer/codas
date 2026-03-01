@@ -198,14 +198,14 @@ pub trait ReadsDecodable {
 ///
 /// Created via [`DecodingScope::enter`], which calls
 /// [`enter_scope`](ReadsDecodable::enter_scope) on construction.
-struct DecodingScope<'a, R: ReadsDecodable + ?Sized> {
+pub(crate) struct DecodingScope<'a, R: ReadsDecodable + ?Sized> {
     reader: &'a mut R,
 }
 
 impl<'a, R: ReadsDecodable + ?Sized> DecodingScope<'a, R> {
     /// Enters a scope on `reader` and returns a guard
     /// that exits the scope when dropped.
-    fn enter(reader: &'a mut R) -> Result<Self, CodecError> {
+    pub(crate) fn enter(reader: &'a mut R) -> Result<Self, CodecError> {
         reader.enter_scope()?;
         Ok(Self { reader })
     }

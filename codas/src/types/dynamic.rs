@@ -387,8 +387,10 @@ fn decode_unspecified_list(
     let mut items = Vec::with_capacity(count.min(1024));
 
     match Type::from_ordinal(inner.format.ordinal) {
-        // Default list with no data fields: nothing to read.
-        Some(Type::Unspecified) if inner.format.data_fields == 0 => {}
+        // Default list with no data fields: materialize count defaults.
+        Some(Type::Unspecified) if inner.format.data_fields == 0 => {
+            items.resize(count, Unspecified::Default);
+        }
 
         // Homogeneous scalar types (blob, no per-element header).
         Some(Type::U8) => {
@@ -489,18 +491,17 @@ fn capture_data(
     reader: &mut (impl ReadsDecodable + ?Sized),
     buf: &mut Vec<u8>,
 ) -> Result<(), CodecError> {
-    reader.enter_scope()?;
+    let mut guard = codec::DecodingScope::enter(reader)?;
 
     // Read and capture the header.
-    let header: DataHeader = reader.read_data()?;
+    let header: DataHeader = guard.read_data()?;
     header.encode(buf)?;
 
     // Capture payload for each count.
     for _ in 0..header.count {
-        capture_data_with_format(reader, buf, header.format)?;
+        capture_data_with_format(&mut *guard, buf, header.format)?;
     }
 
-    reader.exit_scope();
     Ok(())
 }
 

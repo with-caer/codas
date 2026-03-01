@@ -32,7 +32,13 @@ use crate::{
 impl<const SIZE: usize> Encodable for [u8; SIZE] {
     /// Encoded as a [`Format::Data`] containing a
     /// [`Format::Blob(SIZE)`](Format::Blob).
-    const FORMAT: Format = Format::data(0).with(Format::Blob(SIZE as u16));
+    const FORMAT: Format = {
+        assert!(
+            SIZE <= u16::MAX as usize,
+            "SIZE exceeds maximum blob size (u16::MAX)"
+        );
+        Format::data(0).with(Format::Blob(SIZE as u16))
+    };
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         writer.write_all(self)?;
