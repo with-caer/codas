@@ -80,7 +80,7 @@ pub trait Decodable: Encodable {
 /// a [`LimitedReader`] with default limits of [`DEFAULT_MAX_BYTES`]
 /// and [`DEFAULT_MAX_DEPTH`].
 ///
-/// For customer limits, construct a [`LimitedReader`] explicitly
+/// For custom limits, construct a [`LimitedReader`] explicitly
 /// instead of using this trait's blanket implementation.
 pub trait ReadsDecodable {
     /// Reads bytes into `buf`, returning the number
