@@ -17,6 +17,9 @@ use crate::types::{Coda, DataField, DataType, Text, Type};
 
 mod token;
 
+/// Maximum user-defined ordinal value (built-in types occupy 242–255).
+const MAX_USER_ORDINAL: u8 = 241;
+
 /// Parses `markdown` into a [`Coda`].
 pub fn parse(markdown: &str) -> Result<Coda, ParseError> {
     // Parse the raw coda from the markdown.
@@ -35,8 +38,14 @@ pub fn parse(markdown: &str) -> Result<Coda, ParseError> {
     // Create data types.
     for (ordinal, parsed_data) in parsed_coda.data.into_iter().enumerate() {
         // User-defined ordinals start at 1 (0 reserved for Unspecified,
-        // 224-255 reserved for built-in system types).
-        let ordinal = (ordinal + 1) as u8;
+        // 242-255 reserved for built-in system types).
+        let ordinal = ordinal + 1;
+        if ordinal > MAX_USER_ORDINAL as usize {
+            return Err(ParseError::TooManyDataTypes {
+                max: MAX_USER_ORDINAL,
+            });
+        }
+        let ordinal = ordinal as u8;
 
         // Extract docs.
         let docs = if parsed_data.docs.is_empty() {
@@ -305,6 +314,9 @@ pub enum ParseError {
         "Expected to parse docs with at least {minimum_expected} space(s) of indentation, not 0."
     ))]
     ExpectedDocsIndentation { minimum_expected: usize },
+
+    #[snafu(display("Too many data types: maximum is {max}."))]
+    TooManyDataTypes { max: u8 },
 
     #[snafu(display("An unexpected error occurred while parsing the source text."))]
     UnexpectedError,

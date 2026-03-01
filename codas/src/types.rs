@@ -77,7 +77,7 @@ impl Type {
     /// Returns the wire ordinal for this type.
     ///
     /// Built-in ordinals count down from `255`, while user-defined
-    /// ordinals count up from `1``. The ordinal at `0` is reserved
+    /// ordinals count up from `1`. The ordinal at `0` is reserved
     /// for unspecified data.
     pub const fn ordinal(&self) -> u8 {
         match self {
@@ -634,7 +634,7 @@ where
             .build()
         })?;
 
-        if h == DataHeader::default() {
+        if h.count == 0 {
             *self = None;
         } else {
             let mut value = T::default();

@@ -91,7 +91,11 @@ pub trait ReadsDecodable {
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), CodecError> {
         let mut read = 0;
         while read < buf.len() {
-            read += self.read(&mut buf[read..])?;
+            let n = self.read(&mut buf[read..])?;
+            if n == 0 {
+                return Err(CodecError::UnexpectedEof);
+            }
+            read += n;
         }
         Ok(())
     }
@@ -137,11 +141,15 @@ pub trait ReadsDecodable {
         let mut buf = [0; TEMP_BUFFER_SIZE];
         while skipped < length {
             let remaining = length - skipped;
-            if remaining < TEMP_BUFFER_SIZE {
-                skipped += self.read(&mut buf[..remaining])?;
+            let n = if remaining < TEMP_BUFFER_SIZE {
+                self.read(&mut buf[..remaining])?
             } else {
-                skipped += self.read(&mut buf)?;
+                self.read(&mut buf)?
+            };
+            if n == 0 {
+                return Err(CodecError::UnexpectedEof);
             }
+            skipped += n;
         }
         Ok(())
     }

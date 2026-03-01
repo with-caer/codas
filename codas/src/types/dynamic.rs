@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::codec::{
     self, CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
-    WritesEncodable,
+    UnexpectedDataFormatSnafu, WritesEncodable,
 };
 
 use super::{Text, Type};
@@ -337,6 +337,34 @@ fn encode_unspecified_list(
     Ok(())
 }
 
+/// Returns the expected `blob_size` for a scalar ordinal,
+/// or `None` if the ordinal is not a scalar type.
+fn expected_scalar_blob_size(ordinal: u8) -> Option<u16> {
+    match Type::from_ordinal(ordinal)? {
+        Type::U8 | Type::I8 | Type::Bool => Some(1),
+        Type::U16 | Type::I16 => Some(2),
+        Type::U32 | Type::I32 | Type::F32 => Some(4),
+        Type::U64 | Type::I64 | Type::F64 => Some(8),
+        _ => None,
+    }
+}
+
+/// Validates that `format` matches the expected scalar layout
+/// for the given ordinal: `data_fields == 0` and `blob_size`
+/// matches the type's size. Returns an error on mismatch.
+fn validate_scalar_format(format: DataFormat) -> Result<(), CodecError> {
+    if let Some(expected) = expected_scalar_blob_size(format.ordinal) {
+        if format.data_fields != 0 || format.blob_size != expected {
+            return Err(UnexpectedDataFormatSnafu {
+                expected: Format::Blob(expected),
+                actual: Some(DataHeader { count: 0, format }),
+            }
+            .build());
+        }
+    }
+    Ok(())
+}
+
 /// Decodes an inner typed list from `reader`.
 ///
 /// Reads the inner header and decodes elements according to
@@ -352,6 +380,7 @@ fn decode_unspecified_list(
     reader: &mut (impl ReadsDecodable + ?Sized),
 ) -> Result<Vec<Unspecified>, CodecError> {
     let inner: DataHeader = reader.read_data()?;
+    validate_scalar_format(inner.format)?;
     let count = inner.count as usize;
     // Cap initial allocation to avoid OOM from untrusted headers;
     // the Vec will grow naturally if count is larger.
@@ -460,6 +489,8 @@ fn capture_data(
     reader: &mut (impl ReadsDecodable + ?Sized),
     buf: &mut Vec<u8>,
 ) -> Result<(), CodecError> {
+    reader.enter_scope()?;
+
     // Read and capture the header.
     let header: DataHeader = reader.read_data()?;
     header.encode(buf)?;
@@ -469,6 +500,7 @@ fn capture_data(
         capture_data_with_format(reader, buf, header.format)?;
     }
 
+    reader.exit_scope();
     Ok(())
 }
 
@@ -508,6 +540,7 @@ fn decode_scalar_or_list<T: Decodable + Default>(
     header: DataHeader,
     wrap: fn(T) -> Unspecified,
 ) -> Result<Unspecified, CodecError> {
+    validate_scalar_format(header.format)?;
     match header.count {
         0 => Ok(Unspecified::Default),
         1 => {

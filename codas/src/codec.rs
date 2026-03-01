@@ -539,6 +539,10 @@ pub enum CodecError {
     #[snafu(display("an unspecified map has {keys} keys but {values} values"))]
     UnspecifiedMapLengthMismatch { keys: usize, values: usize },
 
+    /// The stream ended before the expected number of bytes were read.
+    #[snafu(display("unexpected end of stream"))]
+    UnexpectedEof,
+
     /// The byte limit for decoding was exceeded.
     #[snafu(display("byte limit exceeded during decoding"))]
     ByteLimitExceeded,
