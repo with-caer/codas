@@ -109,7 +109,7 @@
 //! `u32`| The number of data following the header; `0` for no data, `1` for one data, and so on.
 //! `u16`| The total size in bytes of the data's [`Format::Blob`] fields, defaulting to `0` (none).
 //! `u8` | The total number of the data's [`Format::Data`] fields, defaulting to `0` (none).
-//! `u8` | The ordinal of the data's type in it's documentation, defaulting to `0` ("unspecified").
+//! `u8` | The ordinal of the data's type in its documentation, defaulting to `0` ("unspecified").
 //!
 //! Because each [`DataHeader`] contains a count
 //! of how many distinct sequences of data follow
@@ -340,7 +340,7 @@ impl Encodable for Format {
 impl Decodable for Format {
     fn decode(
         &mut self,
-        reader: &mut (impl ReadsDecodable + ?Sized),
+        reader: &mut impl ReadsDecodable,
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = Self::ensure_header(header, &[1, 2, 3])?;
@@ -395,7 +395,7 @@ pub struct DataFormat {
     /// is unspecified.
     ///
     /// Built-in types count down from 255; user-defined
-    /// types count up from 1, giving ~223 user ordinals
+    /// types count up from 1, giving ~241 user ordinals
     /// per coda.
     pub ordinal: u8,
 }
@@ -464,7 +464,7 @@ impl Encodable for DataHeader {
 impl Decodable for DataHeader {
     fn decode(
         &mut self,
-        reader: &mut (impl decode::ReadsDecodable + ?Sized),
+        reader: &mut impl decode::ReadsDecodable,
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;
@@ -534,6 +534,14 @@ pub enum CodecError {
     /// A map key was not a Text value while decoding unspecified data.
     #[snafu(display("an unspecified map's keys must be Text, but found ordinal {ordinal}"))]
     UnsupportedUnspecifiedMapKey { ordinal: u8 },
+
+    /// The byte limit for decoding was exceeded.
+    #[snafu(display("byte limit exceeded during decoding"))]
+    ByteLimitExceeded,
+
+    /// The nesting depth limit for decoding was exceeded.
+    #[snafu(display("nesting depth limit exceeded during decoding"))]
+    DepthLimitExceeded,
 
     /// An error occurred while reading or
     /// writing the underlying data stream.

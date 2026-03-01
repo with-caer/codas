@@ -111,7 +111,7 @@ impl codas::codec::Encodable for TestData {
 impl codas::codec::Decodable for TestData {
     fn decode(
         &mut self,
-        reader: &mut (impl codas::codec::ReadsDecodable + ?Sized),
+        reader: &mut impl codas::codec::ReadsDecodable,
         header: Option<codas::codec::DataHeader>,
     ) -> core::result::Result<(), codas::codec::CodecError> {
         let header = Self::ensure_header(header, &[0, 1])?;
@@ -162,7 +162,7 @@ impl codas::codec::Encodable for TestMessage {
 impl codas::codec::Decodable for TestMessage {
     fn decode(
         &mut self,
-        reader: &mut (impl codas::codec::ReadsDecodable + ?Sized),
+        reader: &mut impl codas::codec::ReadsDecodable,
         header: Option<codas::codec::DataHeader>,
     ) -> core::result::Result<(), codas::codec::CodecError> {
         let _ = Self::ensure_header(header, &[1])?;

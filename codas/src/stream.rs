@@ -70,6 +70,17 @@ impl Reads for &[u8] {
     }
 }
 
+#[cfg(not(any(feature = "std", test)))]
+impl<R: Reads + ?Sized> Reads for &mut R {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, StreamError> {
+        (**self).read(buf)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), StreamError> {
+        (**self).read_exact(buf)
+    }
+}
+
 #[cfg(any(feature = "std", test))]
 impl<T> Reads for T
 where

@@ -231,7 +231,7 @@ impl Encodable for CryptoCert {
 impl Decodable for CryptoCert {
     fn decode(
         &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
+        reader: &mut impl crate::codec::ReadsDecodable,
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;
@@ -449,7 +449,7 @@ impl Encodable for EncryptedData {
 impl Decodable for EncryptedData {
     fn decode(
         &mut self,
-        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
+        reader: &mut impl crate::codec::ReadsDecodable,
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), CodecError> {
         Self::ensure_header(header, &[0])?;

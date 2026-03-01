@@ -88,13 +88,18 @@ impl Unspecified {
         }
     }
 
-    /// Returns the homogeneous element type if all items
-    /// share the same type, or `None` for empty/heterogeneous lists.
-    fn homogeneous_element_type(items: &[Unspecified]) -> Option<Type> {
+    /// Returns the shared type ordinal if all items have the
+    /// same [`type_ordinal`](Self::type_ordinal), or `None`
+    /// for empty or heterogeneous lists.
+    ///
+    /// Uses cheap `u8` ordinal comparison instead of full
+    /// [`Type`] equality, avoiding heap allocations for
+    /// `List`/`Map` variants.
+    fn homogeneous_ordinal(items: &[Unspecified]) -> Option<u8> {
         let first = items.first()?;
-        let first_type = first.as_type();
-        if items[1..].iter().all(|item| item.as_type() == first_type) {
-            Some(first_type)
+        let ordinal = first.type_ordinal();
+        if items[1..].iter().all(|item| item.type_ordinal() == ordinal) {
+            Some(ordinal)
         } else {
             None
         }
@@ -268,29 +273,29 @@ fn encode_unspecified_list(
 ) -> Result<(), CodecError> {
     let count = codec::try_count(items.len())?;
 
-    match Unspecified::homogeneous_element_type(items) {
-        Some(element_type) => {
-            // Homogeneous: inner header carries the element type.
-            let inner_format = match element_type.format() {
+    match Unspecified::homogeneous_ordinal(items) {
+        Some(ordinal) => {
+            // All elements share the same type ordinal.
+            // Use the first element to determine the encoding format.
+            let first = &items[0];
+            let blob_size = first.scalar_blob_size();
+
+            let inner_format = if blob_size > 0 {
                 // Scalar blobs: elements are raw blob bytes.
-                Format::Blob(blob_size) => DataFormat {
+                DataFormat {
                     blob_size,
                     data_fields: 0,
-                    ordinal: element_type.ordinal(),
-                },
-                // Structured types (Text, List, Map, Data):
+                    ordinal,
+                }
+            } else {
+                // Structured types (Text, List, Map, Data, Default):
                 // each element still needs its own sub-header
                 // for variable-length data.
-                Format::Data(_) => DataFormat {
+                DataFormat {
                     blob_size: 0,
                     data_fields: 1,
-                    ordinal: element_type.ordinal(),
-                },
-                Format::Fluid => DataFormat {
-                    blob_size: 0,
-                    data_fields: 1,
-                    ordinal: element_type.ordinal(),
-                },
+                    ordinal,
+                }
             };
 
             DataHeader {
@@ -344,11 +349,13 @@ fn encode_unspecified_list(
 ///   is fully self-describing.
 /// - Ordinal 0 with `data_fields=0`: empty or all-Default.
 fn decode_unspecified_list(
-    reader: &mut (impl ReadsDecodable + ?Sized),
+    reader: &mut impl ReadsDecodable,
 ) -> Result<Vec<Unspecified>, CodecError> {
     let inner: DataHeader = reader.read_data()?;
     let count = inner.count as usize;
-    let mut items = Vec::with_capacity(count);
+    // Cap initial allocation to avoid OOM from untrusted headers;
+    // the Vec will grow naturally if count is larger.
+    let mut items = Vec::with_capacity(count.min(1024));
 
     match Type::from_ordinal(inner.format.ordinal) {
         // Default list with no data fields: nothing to read.
@@ -449,10 +456,7 @@ fn decode_unspecified_list(
 
 /// Reads a complete data sequence (header + payload) from `reader`,
 /// appending all bytes verbatim to `buf`.
-fn capture_data(
-    reader: &mut (impl ReadsDecodable + ?Sized),
-    buf: &mut Vec<u8>,
-) -> Result<(), CodecError> {
+fn capture_data(reader: &mut impl ReadsDecodable, buf: &mut Vec<u8>) -> Result<(), CodecError> {
     // Read and capture the header.
     let header: DataHeader = reader.read_data()?;
     header.encode(buf)?;
@@ -468,7 +472,7 @@ fn capture_data(
 /// Reads the payload of data with `format` from `reader`,
 /// appending all bytes verbatim to `buf`.
 fn capture_data_with_format(
-    reader: &mut (impl ReadsDecodable + ?Sized),
+    reader: &mut impl ReadsDecodable,
     buf: &mut Vec<u8>,
     format: DataFormat,
 ) -> Result<(), CodecError> {
@@ -487,11 +491,44 @@ fn capture_data_with_format(
     Ok(())
 }
 
+/// Decodes `header.count` blob-encoded scalars from `reader`.
+///
+/// - `count == 1` → returns `wrap(value)` (a single scalar).
+/// - `count > 1`  → returns `Unspecified::List(vec![wrap(v1), …])`.
+/// - `count == 0`  → returns `Unspecified::Default`.
+///
+/// This mirrors how the typed `Vec<T>` codec treats count,
+/// keeping Unspecified decoding consistent with the rest of
+/// the codec.
+fn decode_scalar_or_list<T: Decodable + Default>(
+    reader: &mut impl ReadsDecodable,
+    header: DataHeader,
+    wrap: fn(T) -> Unspecified,
+) -> Result<Unspecified, CodecError> {
+    match header.count {
+        0 => Ok(Unspecified::Default),
+        1 => {
+            let mut v = T::default();
+            v.decode(reader, None)?;
+            Ok(wrap(v))
+        }
+        n => {
+            let mut items = Vec::with_capacity((n as usize).min(1024));
+            for _ in 0..n {
+                let mut v = T::default();
+                v.decode(reader, None)?;
+                items.push(wrap(v));
+            }
+            Ok(Unspecified::List(items))
+        }
+    }
+}
+
 // Decoders ///////////////////////////////////////////////
 impl Decodable for Unspecified {
     fn decode(
         &mut self,
-        reader: &mut (impl ReadsDecodable + ?Sized),
+        reader: &mut impl ReadsDecodable,
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = match header {
@@ -516,61 +553,17 @@ impl Decodable for Unspecified {
                 *self = Unspecified::Default;
             }
 
-            Some(Type::U8) => {
-                let mut v = 0u8;
-                v.decode(reader, None)?;
-                *self = Unspecified::U8(v);
-            }
-            Some(Type::U16) => {
-                let mut v = 0u16;
-                v.decode(reader, None)?;
-                *self = Unspecified::U16(v);
-            }
-            Some(Type::U32) => {
-                let mut v = 0u32;
-                v.decode(reader, None)?;
-                *self = Unspecified::U32(v);
-            }
-            Some(Type::U64) => {
-                let mut v = 0u64;
-                v.decode(reader, None)?;
-                *self = Unspecified::U64(v);
-            }
-            Some(Type::I8) => {
-                let mut v = 0i8;
-                v.decode(reader, None)?;
-                *self = Unspecified::I8(v);
-            }
-            Some(Type::I16) => {
-                let mut v = 0i16;
-                v.decode(reader, None)?;
-                *self = Unspecified::I16(v);
-            }
-            Some(Type::I32) => {
-                let mut v = 0i32;
-                v.decode(reader, None)?;
-                *self = Unspecified::I32(v);
-            }
-            Some(Type::I64) => {
-                let mut v = 0i64;
-                v.decode(reader, None)?;
-                *self = Unspecified::I64(v);
-            }
-            Some(Type::F32) => {
-                let mut v = 0.0f32;
-                v.decode(reader, None)?;
-                *self = Unspecified::F32(v);
-            }
-            Some(Type::F64) => {
-                let mut v = 0.0f64;
-                v.decode(reader, None)?;
-                *self = Unspecified::F64(v);
-            }
-            Some(Type::Bool) => {
-                let mut v = false;
-                v.decode(reader, None)?;
-                *self = Unspecified::Bool(v);
-            }
+            Some(Type::U8) => *self = decode_scalar_or_list(reader, header, Unspecified::U8)?,
+            Some(Type::U16) => *self = decode_scalar_or_list(reader, header, Unspecified::U16)?,
+            Some(Type::U32) => *self = decode_scalar_or_list(reader, header, Unspecified::U32)?,
+            Some(Type::U64) => *self = decode_scalar_or_list(reader, header, Unspecified::U64)?,
+            Some(Type::I8) => *self = decode_scalar_or_list(reader, header, Unspecified::I8)?,
+            Some(Type::I16) => *self = decode_scalar_or_list(reader, header, Unspecified::I16)?,
+            Some(Type::I32) => *self = decode_scalar_or_list(reader, header, Unspecified::I32)?,
+            Some(Type::I64) => *self = decode_scalar_or_list(reader, header, Unspecified::I64)?,
+            Some(Type::F32) => *self = decode_scalar_or_list(reader, header, Unspecified::F32)?,
+            Some(Type::F64) => *self = decode_scalar_or_list(reader, header, Unspecified::F64)?,
+            Some(Type::Bool) => *self = decode_scalar_or_list(reader, header, Unspecified::Bool)?,
 
             Some(Type::Text) => {
                 // Create a copy of the original header with the
@@ -974,6 +967,53 @@ mod tests {
         (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
 
         assert_eq!(original, decoded);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn scalar_count_gt_one_decodes_as_list() -> Result<(), CodecError> {
+        // Manually encode a header with count=3 for U32, followed by
+        // 3 u32 values, then a second data sequence (a bool).
+        // The decoder should produce a List of 3 U32 values,
+        // leaving the stream positioned at the bool.
+        let mut bytes = alloc::vec![];
+
+        // Header: count=3, blob_size=4, data_fields=0, ordinal=Type::U32
+        DataHeader {
+            count: 3,
+            format: DataFormat {
+                blob_size: 4,
+                data_fields: 0,
+                ordinal: Type::U32.ordinal(),
+            },
+        }
+        .encode(&mut bytes)?;
+        // Three u32 values.
+        bytes.extend_from_slice(&10u32.to_le_bytes());
+        bytes.extend_from_slice(&20u32.to_le_bytes());
+        bytes.extend_from_slice(&30u32.to_le_bytes());
+
+        // Append a second value (Bool) to verify stream stays aligned.
+        bytes.write_data(&Unspecified::Bool(true))?;
+
+        // Decode the first value — should get List([U32(10), U32(20), U32(30)]).
+        let mut reader = bytes.as_slice();
+        let mut first = Unspecified::Default;
+        (&mut reader).read_data_into(&mut first)?;
+        assert_eq!(
+            Unspecified::List(alloc::vec![
+                Unspecified::U32(10),
+                Unspecified::U32(20),
+                Unspecified::U32(30),
+            ]),
+            first
+        );
+
+        // The stream should now be at the bool.
+        let mut second = Unspecified::Default;
+        (&mut reader).read_data_into(&mut second)?;
+        assert_eq!(Unspecified::Bool(true), second);
 
         Ok(())
     }

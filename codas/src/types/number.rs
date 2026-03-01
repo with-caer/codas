@@ -35,7 +35,7 @@ macro_rules! numeric_impls {
         impl $crate::codec::Decodable for $primitive_type {
             fn decode(
                 &mut self,
-                reader: &mut (impl $crate::codec::ReadsDecodable + ?Sized),
+                reader: &mut impl $crate::codec::ReadsDecodable,
                 header: Option<$crate::codec::DataHeader>,
             ) -> Result<(), $crate::codec::CodecError> {
                 Self::ensure_no_header(header)?;
@@ -76,7 +76,7 @@ impl Encodable for bool {
 impl Decodable for bool {
     fn decode(
         &mut self,
-        reader: &mut (impl ReadsDecodable + ?Sized),
+        reader: &mut impl ReadsDecodable,
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;

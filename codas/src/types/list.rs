@@ -69,7 +69,7 @@ where
 {
     fn decode(
         &mut self,
-        reader: &mut (impl ReadsDecodable + ?Sized),
+        reader: &mut impl ReadsDecodable,
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = Self::ensure_header(header, &[0])?;
