@@ -43,7 +43,7 @@ impl<const SIZE: usize> Encodable for [u8; SIZE] {
 impl<const SIZE: usize> Decodable for [u8; SIZE] {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let _ = Self::ensure_header(header, &[0])?;
@@ -197,7 +197,7 @@ macro_rules! sized_byte_array {
         impl $crate::codec::Decodable for $type_name {
             fn decode(
                 &mut self,
-                reader: &mut impl $crate::codec::ReadsDecodable,
+                reader: &mut (impl $crate::codec::ReadsDecodable + ?Sized),
                 header: Option<$crate::codec::DataHeader>,
             ) -> Result<(), $crate::codec::CodecError> {
                 self.0.decode(reader, header)

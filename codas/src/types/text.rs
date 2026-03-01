@@ -109,7 +109,7 @@ impl Encodable for Text {
 impl Decodable for Text {
     fn decode(
         &mut self,
-        reader: &mut impl crate::codec::ReadsDecodable,
+        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), crate::codec::CodecError> {
         let header = Self::ensure_header(header, &[0])?;
@@ -163,7 +163,7 @@ impl Decodable for Text {
 /// If decoding fails for any reason, the returned
 /// `string` will be empty.
 fn try_decode_string(
-    reader: &mut impl crate::codec::ReadsDecodable,
+    reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
     header: DataHeader,
     string: &mut String,
 ) -> Result<(), CodecError> {

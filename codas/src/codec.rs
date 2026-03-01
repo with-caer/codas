@@ -340,7 +340,7 @@ impl Encodable for Format {
 impl Decodable for Format {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = Self::ensure_header(header, &[1, 2, 3])?;
@@ -464,7 +464,7 @@ impl Encodable for DataHeader {
 impl Decodable for DataHeader {
     fn decode(
         &mut self,
-        reader: &mut impl decode::ReadsDecodable,
+        reader: &mut (impl decode::ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;
@@ -534,6 +534,10 @@ pub enum CodecError {
     /// A map key was not a Text value while decoding unspecified data.
     #[snafu(display("an unspecified map's keys must be Text, but found ordinal {ordinal}"))]
     UnsupportedUnspecifiedMapKey { ordinal: u8 },
+
+    /// An unspecified map's keys and values had different lengths.
+    #[snafu(display("an unspecified map has {keys} keys but {values} values"))]
+    UnspecifiedMapLengthMismatch { keys: usize, values: usize },
 
     /// The byte limit for decoding was exceeded.
     #[snafu(display("byte limit exceeded during decoding"))]

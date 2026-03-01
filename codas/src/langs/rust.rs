@@ -228,7 +228,7 @@ pub fn generate_types(
         // `fn decode`
         type_struct += "fn decode(\n";
         type_struct += "&mut self,\n";
-        type_struct += "reader: &mut impl codas::codec::ReadsDecodable,\n";
+        type_struct += "reader: &mut (impl codas::codec::ReadsDecodable + ?Sized),\n";
         type_struct += "header: Option<codas::codec::DataHeader>,\n";
         type_struct += ") -> core::result::Result<(), codas::codec::CodecError> {\n";
         type_struct += &format!("let _ = Self::ensure_header(header, &[{type_ordinal}])?;\n");
@@ -322,7 +322,7 @@ pub fn generate_types(
     // `fn decode`
     coda_enum += "fn decode(\n";
     coda_enum += "&mut self,\n";
-    coda_enum += "reader: &mut impl codas::codec::ReadsDecodable,\n";
+    coda_enum += "reader: &mut (impl codas::codec::ReadsDecodable + ?Sized),\n";
     coda_enum += "header: Option<codas::codec::DataHeader>,\n";
     coda_enum += ") -> core::result::Result<(), codas::codec::CodecError> {\n";
 

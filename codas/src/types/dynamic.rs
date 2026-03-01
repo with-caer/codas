@@ -349,7 +349,7 @@ fn encode_unspecified_list(
 ///   is fully self-describing.
 /// - Ordinal 0 with `data_fields=0`: empty or all-Default.
 fn decode_unspecified_list(
-    reader: &mut impl ReadsDecodable,
+    reader: &mut (impl ReadsDecodable + ?Sized),
 ) -> Result<Vec<Unspecified>, CodecError> {
     let inner: DataHeader = reader.read_data()?;
     let count = inner.count as usize;
@@ -456,7 +456,10 @@ fn decode_unspecified_list(
 
 /// Reads a complete data sequence (header + payload) from `reader`,
 /// appending all bytes verbatim to `buf`.
-fn capture_data(reader: &mut impl ReadsDecodable, buf: &mut Vec<u8>) -> Result<(), CodecError> {
+fn capture_data(
+    reader: &mut (impl ReadsDecodable + ?Sized),
+    buf: &mut Vec<u8>,
+) -> Result<(), CodecError> {
     // Read and capture the header.
     let header: DataHeader = reader.read_data()?;
     header.encode(buf)?;
@@ -472,7 +475,7 @@ fn capture_data(reader: &mut impl ReadsDecodable, buf: &mut Vec<u8>) -> Result<(
 /// Reads the payload of data with `format` from `reader`,
 /// appending all bytes verbatim to `buf`.
 fn capture_data_with_format(
-    reader: &mut impl ReadsDecodable,
+    reader: &mut (impl ReadsDecodable + ?Sized),
     buf: &mut Vec<u8>,
     format: DataFormat,
 ) -> Result<(), CodecError> {
@@ -501,7 +504,7 @@ fn capture_data_with_format(
 /// keeping Unspecified decoding consistent with the rest of
 /// the codec.
 fn decode_scalar_or_list<T: Decodable + Default>(
-    reader: &mut impl ReadsDecodable,
+    reader: &mut (impl ReadsDecodable + ?Sized),
     header: DataHeader,
     wrap: fn(T) -> Unspecified,
 ) -> Result<Unspecified, CodecError> {
@@ -528,7 +531,7 @@ fn decode_scalar_or_list<T: Decodable + Default>(
 impl Decodable for Unspecified {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = match header {
@@ -593,6 +596,14 @@ impl Decodable for Unspecified {
                 // Two data fields: keys list, values list.
                 let keys_vec = decode_unspecified_list(reader)?;
                 let values_vec = decode_unspecified_list(reader)?;
+
+                // Validate matching lengths.
+                if keys_vec.len() != values_vec.len() {
+                    return Err(CodecError::UnspecifiedMapLengthMismatch {
+                        keys: keys_vec.len(),
+                        values: values_vec.len(),
+                    });
+                }
 
                 // Build BTreeMap, validating that all keys are Text.
                 let mut map = BTreeMap::new();

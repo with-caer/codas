@@ -443,7 +443,7 @@ impl Encodable for Type {
 impl Decodable for Type {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let header = header.ok_or_else(|| {
@@ -504,7 +504,7 @@ impl Encodable for Coda {
 impl Decodable for Coda {
     fn decode(
         &mut self,
-        reader: &mut impl crate::codec::ReadsDecodable,
+        reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), crate::codec::CodecError> {
         let _ = Self::ensure_header(header, &[0])?;
@@ -539,7 +539,7 @@ impl Encodable for DataType {
 impl Decodable for DataType {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let _ = Self::ensure_header(header, &[0])?;
@@ -575,7 +575,7 @@ impl Encodable for DataField {
 impl Decodable for DataField {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let _ = Self::ensure_header(header, &[0])?;
@@ -623,7 +623,7 @@ where
 {
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
         let h = header.ok_or_else(|| {
@@ -744,7 +744,7 @@ mod tests {
     impl Decodable for TestData {
         fn decode(
             &mut self,
-            reader: &mut impl ReadsDecodable,
+            reader: &mut (impl ReadsDecodable + ?Sized),
             header: Option<DataHeader>,
         ) -> Result<(), CodecError> {
             let _ = Self::ensure_header(header, &[1])?;
@@ -805,7 +805,7 @@ mod tests {
     impl Decodable for NestedTestData {
         fn decode(
             &mut self,
-            reader: &mut impl ReadsDecodable,
+            reader: &mut (impl ReadsDecodable + ?Sized),
             header: Option<DataHeader>,
         ) -> Result<(), CodecError> {
             let _ = Self::ensure_header(header, &[2])?;

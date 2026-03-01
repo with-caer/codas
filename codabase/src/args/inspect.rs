@@ -16,7 +16,7 @@ pub fn execute_inspect_command(command: InspectCommand) {
     inspect_data(&mut buffer.as_slice(), 0).unwrap();
 }
 
-fn inspect_data(data: &mut impl ReadsDecodable, depth: usize) -> Result<(), CodecError> {
+fn inspect_data(data: &mut (impl ReadsDecodable + ?Sized), depth: usize) -> Result<(), CodecError> {
     // Decode header.
     let header: DataHeader = data.read_data()?;
     let format = header.format;

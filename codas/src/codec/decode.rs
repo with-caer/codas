@@ -25,7 +25,7 @@ pub trait Decodable: Encodable {
     /// it's blob size.
     fn decode(
         &mut self,
-        reader: &mut impl ReadsDecodable,
+        reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError>;
 
@@ -82,7 +82,7 @@ pub trait Decodable: Encodable {
 ///
 /// For customer limits, construct a [`LimitedReader`] explicitly
 /// instead of using this trait's blanket implementation.
-pub trait ReadsDecodable: Sized {
+pub trait ReadsDecodable {
     /// Reads bytes into `buf`, returning the number
     /// of bytes read.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, CodecError>;
@@ -190,11 +190,11 @@ pub trait ReadsDecodable: Sized {
 ///
 /// Created via [`DecodingScope::enter`], which calls
 /// [`enter_scope`](ReadsDecodable::enter_scope) on construction.
-struct DecodingScope<'a, R: ReadsDecodable> {
+struct DecodingScope<'a, R: ReadsDecodable + ?Sized> {
     reader: &'a mut R,
 }
 
-impl<'a, R: ReadsDecodable> DecodingScope<'a, R> {
+impl<'a, R: ReadsDecodable + ?Sized> DecodingScope<'a, R> {
     /// Enters a scope on `reader` and returns a guard
     /// that exits the scope when dropped.
     fn enter(reader: &'a mut R) -> Result<Self, CodecError> {
@@ -203,20 +203,20 @@ impl<'a, R: ReadsDecodable> DecodingScope<'a, R> {
     }
 }
 
-impl<R: ReadsDecodable> Drop for DecodingScope<'_, R> {
+impl<R: ReadsDecodable + ?Sized> Drop for DecodingScope<'_, R> {
     fn drop(&mut self) {
         self.reader.exit_scope();
     }
 }
 
-impl<R: ReadsDecodable> core::ops::Deref for DecodingScope<'_, R> {
+impl<R: ReadsDecodable + ?Sized> core::ops::Deref for DecodingScope<'_, R> {
     type Target = R;
     fn deref(&self) -> &R {
         self.reader
     }
 }
 
-impl<R: ReadsDecodable> core::ops::DerefMut for DecodingScope<'_, R> {
+impl<R: ReadsDecodable + ?Sized> core::ops::DerefMut for DecodingScope<'_, R> {
     fn deref_mut(&mut self) -> &mut R {
         self.reader
     }
