@@ -387,12 +387,16 @@ pub struct DataFormat {
     pub blob_size: u16,
 
     /// The total number of [`Format::Data`]
-    /// fields in the data.
+    /// fields in the data (max 255).
     pub data_fields: u8,
 
-    /// Ordinal identifier of the data's
-    /// type in it's corresponding documentation,
-    /// or `0` if the type is unspecified.
+    /// Ordinal identifier of the data's type in its
+    /// corresponding documentation, or `0` if the type
+    /// is unspecified.
+    ///
+    /// Built-in types count down from 255; user-defined
+    /// types count up from 1, giving ~223 user ordinals
+    /// per coda.
     pub ordinal: u8,
 }
 
@@ -526,11 +530,6 @@ pub enum CodecError {
     /// representable count ([`u32::MAX`]).
     #[snafu(display("sequence length {length} exceeds maximum count ({})", u32::MAX))]
     CountOverflow { length: usize },
-
-    /// A decoder encountered an unsupported count
-    /// for the given data format ordinal.
-    #[snafu(display("unsupported count {count} for data format (ordinal {ordinal})"))]
-    UnsupportedCount { ordinal: u8, count: u32 },
 
     /// A map key was not a Text value while decoding unspecified data.
     #[snafu(display("an unspecified map's keys must be Text, but found ordinal {ordinal}"))]

@@ -47,10 +47,11 @@ pub enum Unspecified {
     Map(BTreeMap<Text, Unspecified>),
 
     /// Opaque round-tripping of user-defined types.
-    /// The `raw` bytes contain the complete payload
-    /// (blob + all data field headers and data) verbatim.
+    /// The header preserves the original count and format;
+    /// `raw` contains the complete payload (blob + all data
+    /// field headers and data) for all `count` entries verbatim.
     Data {
-        format: DataFormat,
+        header: DataHeader,
         raw: Vec<u8>,
     },
 }
@@ -116,7 +117,10 @@ impl Unspecified {
             Type::Bool => Unspecified::Bool(false),
             Type::Text => Unspecified::Text(Text::default()),
             Type::Data(typing) => Unspecified::Data {
-                format: typing.format().as_data_format(),
+                header: DataHeader {
+                    count: 0,
+                    format: typing.format().as_data_format(),
+                },
                 raw: Vec::new(),
             },
             Type::List(_) => Unspecified::List(Vec::new()),
@@ -128,7 +132,7 @@ impl Unspecified {
     fn type_ordinal(&self) -> u8 {
         match self {
             // Data preserves the original wire ordinal.
-            Unspecified::Data { format, .. } => format.ordinal,
+            Unspecified::Data { header, .. } => header.format.ordinal,
             // All other variants delegate to their Type's ordinal.
             _ => self.as_type().ordinal(),
         }
@@ -245,12 +249,8 @@ impl Encodable for Unspecified {
             }
             .encode(writer),
 
-            // Typed: preserve the original format.
-            Unspecified::Data { format, .. } => DataHeader {
-                count: 1,
-                format: *format,
-            }
-            .encode(writer),
+            // Typed: preserve the original header.
+            Unspecified::Data { header, .. } => header.encode(writer),
         }
     }
 }
@@ -351,18 +351,8 @@ fn decode_unspecified_list(
     let mut items = Vec::with_capacity(count);
 
     match Type::from_ordinal(inner.format.ordinal) {
-        // Heterogeneous or Default list.
-        Some(Type::Unspecified) => {
-            if inner.format.data_fields > 0 {
-                // Each element is self-describing.
-                for _ in 0..count {
-                    let mut item = Unspecified::Default;
-                    reader.read_data_into(&mut item)?;
-                    items.push(item);
-                }
-            }
-            // else: data_fields=0 means all Default (nothing to read).
-        }
+        // Default list with no data fields: nothing to read.
+        Some(Type::Unspecified) if inner.format.data_fields == 0 => {}
 
         // Homogeneous scalar types (blob, no per-element header).
         Some(Type::U8) => {
@@ -443,30 +433,8 @@ fn decode_unspecified_list(
             }
         }
 
-        // Homogeneous structured types: each element has a sub-header.
-        Some(Type::Text) => {
-            for _ in 0..count {
-                let mut item = Unspecified::Default;
-                reader.read_data_into(&mut item)?;
-                items.push(item);
-            }
-        }
-        Some(Type::List(_)) => {
-            for _ in 0..count {
-                let mut item = Unspecified::Default;
-                reader.read_data_into(&mut item)?;
-                items.push(item);
-            }
-        }
-        Some(Type::Map(_)) => {
-            for _ in 0..count {
-                let mut item = Unspecified::Default;
-                reader.read_data_into(&mut item)?;
-                items.push(item);
-            }
-        }
-
-        // Unknown ordinal: each element has a sub-header.
+        // Structured, heterogeneous, or unknown: each element
+        // carries its own self-describing header.
         _ => {
             for _ in 0..count {
                 let mut item = Unspecified::Default;
@@ -605,18 +573,19 @@ impl Decodable for Unspecified {
             }
 
             Some(Type::Text) => {
-                let mut v = Text::default();
-                // Pass the header through with ordinal translated to 0
-                // since Text::decode expects ordinal 0.
-                let text_header = DataHeader {
+                // Create a copy of the original header with the
+                // ordinal zeroed out, matching internal types'
+                // expectation of having `ordinal = 0`.
+                let header = DataHeader {
                     count: header.count,
                     format: DataFormat {
-                        blob_size: header.format.blob_size,
-                        data_fields: header.format.data_fields,
                         ordinal: 0,
+                        ..header.format
                     },
                 };
-                v.decode(reader, Some(text_header))?;
+
+                let mut v = Text::default();
+                v.decode(reader, Some(header))?;
                 *self = Unspecified::Text(v);
             }
 
@@ -649,39 +618,25 @@ impl Decodable for Unspecified {
                 *self = Unspecified::Map(map);
             }
 
-            // Decode unknown ordinals as opaque data.
+            // Decode unknown ordinals as opaque data,
+            // capturing all `count` entries verbatim.
             _ => {
-                let ordinal = header.format.ordinal;
-                if header.count != 1 {
-                    return Err(CodecError::UnsupportedCount {
-                        ordinal,
-                        count: header.count,
-                    });
-                }
-
                 let mut raw = Vec::new();
+                for _ in 0..header.count {
+                    // Capture blob bytes.
+                    if header.format.blob_size > 0 {
+                        let start = raw.len();
+                        raw.resize(start + header.format.blob_size as usize, 0);
+                        reader.read_exact(&mut raw[start..])?;
+                    }
 
-                // Capture blob bytes.
-                if header.format.blob_size > 0 {
-                    let blob_size = header.format.blob_size as usize;
-                    let start = raw.len();
-                    raw.resize(start + blob_size, 0);
-                    reader.read_exact(&mut raw[start..])?;
+                    // Capture data fields (header + payload) verbatim.
+                    for _ in 0..header.format.data_fields {
+                        capture_data(reader, &mut raw)?;
+                    }
                 }
 
-                // Capture data fields (header + payload) verbatim.
-                for _ in 0..header.format.data_fields {
-                    capture_data(reader, &mut raw)?;
-                }
-
-                *self = Unspecified::Data {
-                    format: DataFormat {
-                        blob_size: header.format.blob_size,
-                        data_fields: header.format.data_fields,
-                        ordinal,
-                    },
-                    raw,
-                };
+                *self = Unspecified::Data { header, raw };
             }
         }
 
@@ -725,8 +680,8 @@ impl serde::Serialize for Unspecified {
                 m.end()
             }
             Unspecified::Data { .. } => {
-                // Typed data doesn't have a meaningful JSON representation;
-                // serialize as unit.
+                // [`Unspecified::Data`] serializes as `null` since opaque binary
+                // data has no meaningful JSON representation.
                 serializer.serialize_unit()
             }
         }
@@ -784,8 +739,9 @@ impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
         Ok(Unspecified::U32(v))
     }
 
+    /// JSON integers are untyped, so unsigned values that fit
+    /// in [`i64`] are normalized to [`Unspecified::I64`].
     fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        // Normalize to I64 when value fits, for JSON integer interop.
         if let Ok(i) = i64::try_from(v) {
             Ok(Unspecified::I64(i))
         } else {
