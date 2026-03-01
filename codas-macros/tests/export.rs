@@ -181,14 +181,14 @@ pub fn unspecified_map_from_arbitrary_json() {
     // Nested array — deserialized as Unspecified::List.
     let tags = example.request_data.get(&Text::from("tags"));
     assert!(
-        matches!(tags, Some(Unspecified::List(..))),
+        matches!(tags, Some(Unspecified::List(_))),
         "expected List, got {tags:?}"
     );
 
     // Nested object — deserialized as Unspecified::Map.
     let metadata = example.request_data.get(&Text::from("metadata"));
     assert!(
-        matches!(metadata, Some(Unspecified::Map { .. })),
+        matches!(metadata, Some(Unspecified::Map(..))),
         "expected Map, got {metadata:?}"
     );
 

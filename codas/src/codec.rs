@@ -532,6 +532,10 @@ pub enum CodecError {
     #[snafu(display("unsupported count {count} for data format (ordinal {ordinal})"))]
     UnsupportedCount { ordinal: u8, count: u32 },
 
+    /// A map key was not a Text value while decoding unspecified data.
+    #[snafu(display("an unspecified map's keys must be Text, but found ordinal {ordinal}"))]
+    UnsupportedUnspecifiedMapKey { ordinal: u8 },
+
     /// An error occurred while reading or
     /// writing the underlying data stream.
     #[snafu(display("error when reading or writing from a data stream: {source}"))]

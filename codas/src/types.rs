@@ -26,11 +26,6 @@ mod text;
 pub use dynamic::Unspecified;
 pub use text::*;
 
-use dynamic::{
-    ORD_BOOL, ORD_DATA, ORD_DEFAULT, ORD_F32, ORD_F64, ORD_I16, ORD_I32, ORD_I64, ORD_I8, ORD_LIST,
-    ORD_MAP, ORD_TEXT, ORD_U16, ORD_U32, ORD_U64, ORD_U8,
-};
-
 /// Enumeration of available built in types.
 #[non_exhaustive]
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -79,6 +74,61 @@ pub enum Type {
 }
 
 impl Type {
+    /// Returns the wire ordinal for this type.
+    ///
+    /// Built-in ordinals count down from `255`, while user-defined
+    /// ordinals count up from `1``. The ordinal at `0` is reserved
+    /// for unspecified data.
+    pub const fn ordinal(&self) -> u8 {
+        match self {
+            Type::Unspecified => 0,
+            Type::U8 => 255,
+            Type::U16 => 254,
+            Type::U32 => 253,
+            Type::U64 => 252,
+            Type::I8 => 251,
+            Type::I16 => 250,
+            Type::I32 => 249,
+            Type::I64 => 248,
+            Type::F32 => 247,
+            Type::F64 => 246,
+            Type::Bool => 245,
+            Type::Text => 244,
+            Type::Data(data) => data.format.as_data_format().ordinal,
+            Type::List(_) => 243,
+            Type::Map(_) => 242,
+        }
+    }
+
+    /// Returns the type corresponding to `ordinal`.
+    ///
+    /// Iff ordinal does not correspond to a built-in-type,
+    /// `None` is returned.
+    ///
+    /// List and Map return placeholder inner types
+    /// ([`Type::Unspecified`]) since the ordinal alone doesn't
+    /// describe the element/key/value types.
+    pub fn from_ordinal(ordinal: u8) -> Option<Self> {
+        match ordinal {
+            0 => Some(Type::Unspecified),
+            255 => Some(Type::U8),
+            254 => Some(Type::U16),
+            253 => Some(Type::U32),
+            252 => Some(Type::U64),
+            251 => Some(Type::I8),
+            250 => Some(Type::I16),
+            249 => Some(Type::I32),
+            248 => Some(Type::I64),
+            247 => Some(Type::F32),
+            246 => Some(Type::F64),
+            245 => Some(Type::Bool),
+            244 => Some(Type::Text),
+            243 => Some(Type::List(Type::Unspecified.into())),
+            242 => Some(Type::Map((Type::Unspecified, Type::Unspecified).into())),
+            _ => None,
+        }
+    }
+
     /// The type's encoding format.
     pub const fn format(&self) -> Format {
         match self {
@@ -379,48 +429,14 @@ impl Encodable for Type {
         &self,
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
-        let ordinal = match self {
-            Type::Unspecified => ORD_DEFAULT,
-            Type::U8 => ORD_U8,
-            Type::U16 => ORD_U16,
-            Type::U32 => ORD_U32,
-            Type::U64 => ORD_U64,
-            Type::I8 => ORD_I8,
-            Type::I16 => ORD_I16,
-            Type::I32 => ORD_I32,
-            Type::I64 => ORD_I64,
-            Type::F32 => ORD_F32,
-            Type::F64 => ORD_F64,
-            Type::Bool => ORD_BOOL,
-            Type::Text => ORD_TEXT,
-            Type::Data(..) => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(ORD_DATA).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
-            Type::List { .. } => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(ORD_LIST).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
-            Type::Map { .. } => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(ORD_MAP).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
+        let format = match self {
+            Type::Data(..) | Type::List(_) | Type::Map(_) => Format::data(self.ordinal())
+                .with(Type::FORMAT)
+                .as_data_format(),
+            _ => Format::data(self.ordinal()).as_data_format(),
         };
 
-        DataHeader {
-            count: 1,
-            format: Format::data(ordinal).as_data_format(),
-        }
-        .encode(writer)
+        DataHeader { count: 1, format }.encode(writer)
     }
 }
 
@@ -430,87 +446,37 @@ impl Decodable for Type {
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let header = Self::ensure_header(
-            header,
-            &[
-                ORD_DEFAULT,
-                ORD_U8,
-                ORD_U16,
-                ORD_U32,
-                ORD_U64,
-                ORD_I8,
-                ORD_I16,
-                ORD_I32,
-                ORD_I64,
-                ORD_F32,
-                ORD_F64,
-                ORD_BOOL,
-                ORD_TEXT,
-                ORD_DATA,
-                ORD_LIST,
-                ORD_MAP,
-            ],
-        )?;
+        let header = header.ok_or_else(|| {
+            UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: None::<DataHeader>,
+            }
+            .build()
+        })?;
 
-        match header.format.ordinal {
-            ORD_DEFAULT => {
-                *self = Type::Unspecified;
-            }
-            ORD_U8 => {
-                *self = Type::U8;
-            }
-            ORD_U16 => {
-                *self = Type::U16;
-            }
-            ORD_U32 => {
-                *self = Type::U32;
-            }
-            ORD_U64 => {
-                *self = Type::U64;
-            }
-            ORD_I8 => {
-                *self = Type::I8;
-            }
-            ORD_I16 => {
-                *self = Type::I16;
-            }
-            ORD_I32 => {
-                *self = Type::I32;
-            }
-            ORD_I64 => {
-                *self = Type::I64;
-            }
-            ORD_F32 => {
-                *self = Type::F32;
-            }
-            ORD_F64 => {
-                *self = Type::F64;
-            }
-            ORD_BOOL => {
-                *self = Type::Bool;
-            }
-            ORD_TEXT => {
-                *self = Type::Text;
-            }
-            ORD_DATA => {
-                let mut typing = DataType::default();
-                reader.read_data_into(&mut typing)?;
-                *self = Type::Data(typing);
-            }
-            ORD_LIST => {
+        match Type::from_ordinal(header.format.ordinal) {
+            Some(Type::List(_)) => {
                 let mut typing = Type::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::List(typing.into());
             }
-            ORD_MAP => {
+            Some(Type::Map(_)) => {
                 let mut key_typing = Type::default();
                 reader.read_data_into(&mut key_typing)?;
                 let mut value_typing = Type::default();
                 reader.read_data_into(&mut value_typing)?;
                 *self = Type::Map((key_typing, value_typing).into());
             }
-            _ => unreachable!(),
-        };
+            Some(simple) => {
+                *self = simple;
+            }
+            // Any unknown ordinal is a data type descriptor.
+            None => {
+                let mut typing = DataType::default();
+                reader.read_data_into(&mut typing)?;
+                *self = Type::Data(typing);
+            }
+        }
 
         Ok(())
     }
@@ -962,5 +928,22 @@ mod tests {
         data.write_data(&option).expect("encoded");
         let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
         assert_eq!(option, decoded);
+    }
+
+    /// Verifies that `ordinal()` and `from_ordinal()` are consistent:
+    /// for every ordinal 0–255, if `from_ordinal` returns `Some(t)`,
+    /// then `t.ordinal()` equals the original ordinal.
+    #[test]
+    fn ordinal_round_trip() {
+        for ordinal in 0..=255u8 {
+            if let Some(typ) = Type::from_ordinal(ordinal) {
+                assert_eq!(
+                    ordinal,
+                    typ.ordinal(),
+                    "from_ordinal({ordinal}) returned {typ:?} with ordinal {}",
+                    typ.ordinal()
+                );
+            }
+        }
     }
 }

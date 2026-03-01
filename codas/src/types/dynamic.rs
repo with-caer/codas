@@ -1,4 +1,5 @@
 //! ## Unstable
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::codec::{
@@ -6,7 +7,7 @@ use crate::codec::{
     WritesEncodable,
 };
 
-use super::Text;
+use super::{Text, Type};
 
 /// A value whose type is not specified.
 ///
@@ -42,11 +43,8 @@ pub enum Unspecified {
     /// List of dynamic values.
     List(Vec<Unspecified>),
 
-    /// Mapping of dynamic values (parallel key/value vecs).
-    Map {
-        keys: Vec<Unspecified>,
-        values: Vec<Unspecified>,
-    },
+    /// Mapping of text keys to dynamic values.
+    Map(BTreeMap<Text, Unspecified>),
 
     /// Opaque round-tripping of user-defined types.
     /// The `raw` bytes contain the complete payload
@@ -57,30 +55,6 @@ pub enum Unspecified {
     },
 }
 
-/// Ordinal-to-type-tag constants for self-describing encoding.
-/// System/built-in ordinals count down from 255 (high end of u8).
-/// User-defined ordinals start at 1 (low end).
-/// Both ranges grow toward the middle, maximizing the gap.
-/// Ordinal 0 = Unspecified/None.
-pub(crate) const ORD_DEFAULT: u8 = 0;
-pub(crate) const ORD_U8: u8 = 255;
-pub(crate) const ORD_U16: u8 = 254;
-pub(crate) const ORD_U32: u8 = 253;
-pub(crate) const ORD_U64: u8 = 252;
-pub(crate) const ORD_I8: u8 = 251;
-pub(crate) const ORD_I16: u8 = 250;
-pub(crate) const ORD_I32: u8 = 249;
-pub(crate) const ORD_I64: u8 = 248;
-pub(crate) const ORD_F32: u8 = 247;
-pub(crate) const ORD_F64: u8 = 246;
-pub(crate) const ORD_BOOL: u8 = 245;
-pub(crate) const ORD_TEXT: u8 = 244;
-/// Used by the Type enum codec to round-trip a [`super::DataType`] descriptor.
-/// Not used by [`Unspecified`], which preserves user-defined ordinals directly.
-pub(crate) const ORD_DATA: u8 = 243;
-pub(crate) const ORD_LIST: u8 = 242;
-pub(crate) const ORD_MAP: u8 = 241;
-
 impl Unspecified {
     /// Constant [`DataType`] for unspecified data.
     pub const DATA_TYPE: super::DataType = super::DataType::new_fluid(
@@ -88,53 +62,75 @@ impl Unspecified {
         Some(Text::from("Unspecified data.")),
     );
 
+    /// Returns the corresponding [`Type`](Type) for this value.
+    pub fn as_type(&self) -> Type {
+        match self {
+            Unspecified::Default => Type::Unspecified,
+            Unspecified::U8(_) => Type::U8,
+            Unspecified::I8(_) => Type::I8,
+            Unspecified::U16(_) => Type::U16,
+            Unspecified::I16(_) => Type::I16,
+            Unspecified::U32(_) => Type::U32,
+            Unspecified::I32(_) => Type::I32,
+            Unspecified::U64(_) => Type::U64,
+            Unspecified::I64(_) => Type::I64,
+            Unspecified::F32(_) => Type::F32,
+            Unspecified::F64(_) => Type::F64,
+            Unspecified::Bool(_) => Type::Bool,
+            Unspecified::Text(_) => Type::Text,
+            Unspecified::List(_) => Type::List(alloc::boxed::Box::new(Type::Unspecified)),
+            Unspecified::Map(_) => {
+                Type::Map(alloc::boxed::Box::new((Type::Text, Type::Unspecified)))
+            }
+            // Data and Default don't have a precise Type mapping.
+            Unspecified::Data { .. } => Type::Unspecified,
+        }
+    }
+
+    /// Returns the homogeneous element type if all items
+    /// share the same type, or `None` for empty/heterogeneous lists.
+    fn homogeneous_element_type(items: &[Unspecified]) -> Option<Type> {
+        let first = items.first()?;
+        let first_type = first.as_type();
+        if items[1..].iter().all(|item| item.as_type() == first_type) {
+            Some(first_type)
+        } else {
+            None
+        }
+    }
+
     /// Returns the default value of a `typing`.
-    pub fn default_of(typing: &super::Type) -> Unspecified {
+    pub fn default_of(typing: &Type) -> Unspecified {
         match typing {
-            super::Type::Unspecified => Unspecified::Default,
-            super::Type::U8 => Unspecified::U8(0),
-            super::Type::I8 => Unspecified::I8(0),
-            super::Type::U16 => Unspecified::U16(0),
-            super::Type::I16 => Unspecified::I16(0),
-            super::Type::U32 => Unspecified::U32(0),
-            super::Type::I32 => Unspecified::I32(0),
-            super::Type::U64 => Unspecified::U64(0),
-            super::Type::I64 => Unspecified::I64(0),
-            super::Type::F32 => Unspecified::F32(0.0),
-            super::Type::F64 => Unspecified::F64(0.0),
-            super::Type::Bool => Unspecified::Bool(false),
-            super::Type::Text => Unspecified::Text(Text::default()),
-            super::Type::Data(typing) => Unspecified::Data {
+            Type::Unspecified => Unspecified::Default,
+            Type::U8 => Unspecified::U8(0),
+            Type::I8 => Unspecified::I8(0),
+            Type::U16 => Unspecified::U16(0),
+            Type::I16 => Unspecified::I16(0),
+            Type::U32 => Unspecified::U32(0),
+            Type::I32 => Unspecified::I32(0),
+            Type::U64 => Unspecified::U64(0),
+            Type::I64 => Unspecified::I64(0),
+            Type::F32 => Unspecified::F32(0.0),
+            Type::F64 => Unspecified::F64(0.0),
+            Type::Bool => Unspecified::Bool(false),
+            Type::Text => Unspecified::Text(Text::default()),
+            Type::Data(typing) => Unspecified::Data {
                 format: typing.format().as_data_format(),
                 raw: Vec::new(),
             },
-            super::Type::List(_) => Unspecified::List(Vec::new()),
-            super::Type::Map(_) => Unspecified::Map {
-                keys: Vec::new(),
-                values: Vec::new(),
-            },
+            Type::List(_) => Unspecified::List(Vec::new()),
+            Type::Map(_) => Unspecified::Map(BTreeMap::new()),
         }
     }
 
     /// Returns the type-tag ordinal for this value.
     fn type_ordinal(&self) -> u8 {
         match self {
-            Unspecified::Default => ORD_DEFAULT,
-            Unspecified::U8(_) => ORD_U8,
-            Unspecified::I8(_) => ORD_I8,
-            Unspecified::U16(_) => ORD_U16,
-            Unspecified::I16(_) => ORD_I16,
-            Unspecified::U32(_) => ORD_U32,
-            Unspecified::I32(_) => ORD_I32,
-            Unspecified::U64(_) => ORD_U64,
-            Unspecified::I64(_) => ORD_I64,
-            Unspecified::F32(_) => ORD_F32,
-            Unspecified::F64(_) => ORD_F64,
-            Unspecified::Bool(_) => ORD_BOOL,
-            Unspecified::Text(_) => ORD_TEXT,
-            Unspecified::List(_) => ORD_LIST,
-            Unspecified::Map { .. } => ORD_MAP,
+            // Data preserves the original wire ordinal.
             Unspecified::Data { format, .. } => format.ordinal,
+            // All other variants delegate to their Type's ordinal.
+            _ => self.as_type().ordinal(),
         }
     }
 
@@ -172,17 +168,14 @@ impl Encodable for Unspecified {
             Unspecified::F64(v) => v.encode(writer),
             Unspecified::Bool(v) => v.encode(writer),
             Unspecified::Text(v) => v.encode(writer),
-            Unspecified::List(items) => {
-                for item in items {
-                    writer.write_data(item)?;
-                }
-                Ok(())
-            }
-            Unspecified::Map { keys, values } => {
-                // Encode keys as a self-describing list.
-                encode_unspecified_list(keys, writer)?;
-                // Encode values as a self-describing list.
-                encode_unspecified_list(values, writer)?;
+            Unspecified::List(items) => encode_unspecified_list(items, writer),
+            Unspecified::Map(map) => {
+                // Collect keys and values for wire encoding as two sub-lists.
+                let keys: Vec<Unspecified> =
+                    map.keys().map(|k| Unspecified::Text(k.clone())).collect();
+                let values: Vec<Unspecified> = map.values().cloned().collect();
+                encode_unspecified_list(&keys, writer)?;
+                encode_unspecified_list(&values, writer)?;
                 Ok(())
             }
             Unspecified::Data { raw, .. } => {
@@ -220,35 +213,34 @@ impl Encodable for Unspecified {
             }
             .encode(writer),
 
-            // Text: same wire format as Text::encode_header but with ORD_TEXT.
             Unspecified::Text(v) => DataHeader {
                 count: codec::try_count(v.len())?,
                 format: DataFormat {
                     blob_size: 1,
                     data_fields: 0,
-                    ordinal: ORD_TEXT,
+                    ordinal: self.type_ordinal(),
                 },
             }
             .encode(writer),
 
-            // List: each item self-describes.
-            Unspecified::List(items) => DataHeader {
-                count: codec::try_count(items.len())?,
+            // List: always count=1 wrapping an inner typed header.
+            Unspecified::List(_) => DataHeader {
+                count: 1,
                 format: DataFormat {
                     blob_size: 0,
                     data_fields: 1,
-                    ordinal: ORD_LIST,
+                    ordinal: self.type_ordinal(),
                 },
             }
             .encode(writer),
 
             // Map: 2 data fields (keys list + values list).
-            Unspecified::Map { .. } => DataHeader {
+            Unspecified::Map(_) => DataHeader {
                 count: 1,
                 format: DataFormat {
                     blob_size: 0,
                     data_fields: 2,
-                    ordinal: ORD_MAP,
+                    ordinal: self.type_ordinal(),
                 },
             }
             .encode(writer),
@@ -263,29 +255,228 @@ impl Encodable for Unspecified {
     }
 }
 
-/// Encodes a `Vec<Unspecified>` as a self-describing list
-/// (header + items), used for map keys/values.
+/// Encodes a slice of [`Unspecified`] values.
+///
+/// If all elements share the same type, encodes a homogeneous
+/// inner header so per-element headers are avoided for scalar types.
+///
+/// Otherwise, encodes a heterogeneous inner header where each element
+/// carries a self-describing header.
 fn encode_unspecified_list(
     items: &[Unspecified],
     writer: &mut (impl WritesEncodable + ?Sized),
 ) -> Result<(), CodecError> {
-    // Write list header.
-    DataHeader {
-        count: codec::try_count(items.len())?,
-        format: DataFormat {
-            blob_size: 0,
-            data_fields: 1,
-            ordinal: ORD_LIST,
-        },
-    }
-    .encode(writer)?;
+    let count = codec::try_count(items.len())?;
 
-    // Write each item self-describing.
-    for item in items {
-        writer.write_data(item)?;
+    match Unspecified::homogeneous_element_type(items) {
+        Some(element_type) => {
+            // Homogeneous: inner header carries the element type.
+            let inner_format = match element_type.format() {
+                // Scalar blobs: elements are raw blob bytes.
+                Format::Blob(blob_size) => DataFormat {
+                    blob_size,
+                    data_fields: 0,
+                    ordinal: element_type.ordinal(),
+                },
+                // Structured types (Text, List, Map, Data):
+                // each element still needs its own sub-header
+                // for variable-length data.
+                Format::Data(_) => DataFormat {
+                    blob_size: 0,
+                    data_fields: 1,
+                    ordinal: element_type.ordinal(),
+                },
+                Format::Fluid => DataFormat {
+                    blob_size: 0,
+                    data_fields: 1,
+                    ordinal: element_type.ordinal(),
+                },
+            };
+
+            DataHeader {
+                count,
+                format: inner_format,
+            }
+            .encode(writer)?;
+
+            if inner_format.data_fields == 0 {
+                // Scalar: encode just the blob payload.
+                for item in items {
+                    item.encode(writer)?;
+                }
+            } else {
+                // Structured: each element self-describes.
+                for item in items {
+                    writer.write_data(item)?;
+                }
+            }
+        }
+        None => {
+            // Heterogeneous (or empty): each element self-describes.
+            DataHeader {
+                count,
+                format: DataFormat {
+                    blob_size: 0,
+                    data_fields: 1,
+                    ordinal: 0,
+                },
+            }
+            .encode(writer)?;
+
+            for item in items {
+                writer.write_data(item)?;
+            }
+        }
     }
 
     Ok(())
+}
+
+/// Decodes an inner typed list from `reader`.
+///
+/// Reads the inner header and decodes elements according to
+/// the header's ordinal:
+/// - Known scalar ordinal with `data_fields=0`: decode N blobs
+///   as the corresponding [`Unspecified`] variant.
+/// - Known structured ordinal (Text, List, Map) with `data_fields>0`:
+///   decode N self-describing elements.
+/// - Ordinal 0 with `data_fields=1`: heterogeneous, each element
+///   is fully self-describing.
+/// - Ordinal 0 with `data_fields=0`: empty or all-Default.
+fn decode_unspecified_list(
+    reader: &mut (impl ReadsDecodable + ?Sized),
+) -> Result<Vec<Unspecified>, CodecError> {
+    let inner: DataHeader = reader.read_data()?;
+    let count = inner.count as usize;
+    let mut items = Vec::with_capacity(count);
+
+    match Type::from_ordinal(inner.format.ordinal) {
+        // Heterogeneous or Default list.
+        Some(Type::Unspecified) => {
+            if inner.format.data_fields > 0 {
+                // Each element is self-describing.
+                for _ in 0..count {
+                    let mut item = Unspecified::Default;
+                    reader.read_data_into(&mut item)?;
+                    items.push(item);
+                }
+            }
+            // else: data_fields=0 means all Default (nothing to read).
+        }
+
+        // Homogeneous scalar types (blob, no per-element header).
+        Some(Type::U8) => {
+            for _ in 0..count {
+                let mut v = 0u8;
+                v.decode(reader, None)?;
+                items.push(Unspecified::U8(v));
+            }
+        }
+        Some(Type::U16) => {
+            for _ in 0..count {
+                let mut v = 0u16;
+                v.decode(reader, None)?;
+                items.push(Unspecified::U16(v));
+            }
+        }
+        Some(Type::U32) => {
+            for _ in 0..count {
+                let mut v = 0u32;
+                v.decode(reader, None)?;
+                items.push(Unspecified::U32(v));
+            }
+        }
+        Some(Type::U64) => {
+            for _ in 0..count {
+                let mut v = 0u64;
+                v.decode(reader, None)?;
+                items.push(Unspecified::U64(v));
+            }
+        }
+        Some(Type::I8) => {
+            for _ in 0..count {
+                let mut v = 0i8;
+                v.decode(reader, None)?;
+                items.push(Unspecified::I8(v));
+            }
+        }
+        Some(Type::I16) => {
+            for _ in 0..count {
+                let mut v = 0i16;
+                v.decode(reader, None)?;
+                items.push(Unspecified::I16(v));
+            }
+        }
+        Some(Type::I32) => {
+            for _ in 0..count {
+                let mut v = 0i32;
+                v.decode(reader, None)?;
+                items.push(Unspecified::I32(v));
+            }
+        }
+        Some(Type::I64) => {
+            for _ in 0..count {
+                let mut v = 0i64;
+                v.decode(reader, None)?;
+                items.push(Unspecified::I64(v));
+            }
+        }
+        Some(Type::F32) => {
+            for _ in 0..count {
+                let mut v = 0.0f32;
+                v.decode(reader, None)?;
+                items.push(Unspecified::F32(v));
+            }
+        }
+        Some(Type::F64) => {
+            for _ in 0..count {
+                let mut v = 0.0f64;
+                v.decode(reader, None)?;
+                items.push(Unspecified::F64(v));
+            }
+        }
+        Some(Type::Bool) => {
+            for _ in 0..count {
+                let mut v = false;
+                v.decode(reader, None)?;
+                items.push(Unspecified::Bool(v));
+            }
+        }
+
+        // Homogeneous structured types: each element has a sub-header.
+        Some(Type::Text) => {
+            for _ in 0..count {
+                let mut item = Unspecified::Default;
+                reader.read_data_into(&mut item)?;
+                items.push(item);
+            }
+        }
+        Some(Type::List(_)) => {
+            for _ in 0..count {
+                let mut item = Unspecified::Default;
+                reader.read_data_into(&mut item)?;
+                items.push(item);
+            }
+        }
+        Some(Type::Map(_)) => {
+            for _ in 0..count {
+                let mut item = Unspecified::Default;
+                reader.read_data_into(&mut item)?;
+                items.push(item);
+            }
+        }
+
+        // Unknown ordinal: each element has a sub-header.
+        _ => {
+            for _ in 0..count {
+                let mut item = Unspecified::Default;
+                reader.read_data_into(&mut item)?;
+                items.push(item);
+            }
+        }
+    }
+
+    Ok(items)
 }
 
 /// Reads a complete data sequence (header + payload) from `reader`,
@@ -345,8 +536,8 @@ impl Decodable for Unspecified {
             }
         };
 
-        match header.format.ordinal {
-            ORD_DEFAULT => {
+        match Type::from_ordinal(header.format.ordinal) {
+            Some(Type::Unspecified) => {
                 // Skip any data that might be present.
                 for _ in 0..header.count {
                     reader.skip_blob(header.format.blob_size as usize)?;
@@ -357,63 +548,63 @@ impl Decodable for Unspecified {
                 *self = Unspecified::Default;
             }
 
-            ORD_U8 => {
+            Some(Type::U8) => {
                 let mut v = 0u8;
                 v.decode(reader, None)?;
                 *self = Unspecified::U8(v);
             }
-            ORD_U16 => {
+            Some(Type::U16) => {
                 let mut v = 0u16;
                 v.decode(reader, None)?;
                 *self = Unspecified::U16(v);
             }
-            ORD_U32 => {
+            Some(Type::U32) => {
                 let mut v = 0u32;
                 v.decode(reader, None)?;
                 *self = Unspecified::U32(v);
             }
-            ORD_U64 => {
+            Some(Type::U64) => {
                 let mut v = 0u64;
                 v.decode(reader, None)?;
                 *self = Unspecified::U64(v);
             }
-            ORD_I8 => {
+            Some(Type::I8) => {
                 let mut v = 0i8;
                 v.decode(reader, None)?;
                 *self = Unspecified::I8(v);
             }
-            ORD_I16 => {
+            Some(Type::I16) => {
                 let mut v = 0i16;
                 v.decode(reader, None)?;
                 *self = Unspecified::I16(v);
             }
-            ORD_I32 => {
+            Some(Type::I32) => {
                 let mut v = 0i32;
                 v.decode(reader, None)?;
                 *self = Unspecified::I32(v);
             }
-            ORD_I64 => {
+            Some(Type::I64) => {
                 let mut v = 0i64;
                 v.decode(reader, None)?;
                 *self = Unspecified::I64(v);
             }
-            ORD_F32 => {
+            Some(Type::F32) => {
                 let mut v = 0.0f32;
                 v.decode(reader, None)?;
                 *self = Unspecified::F32(v);
             }
-            ORD_F64 => {
+            Some(Type::F64) => {
                 let mut v = 0.0f64;
                 v.decode(reader, None)?;
                 *self = Unspecified::F64(v);
             }
-            ORD_BOOL => {
+            Some(Type::Bool) => {
                 let mut v = false;
                 v.decode(reader, None)?;
                 *self = Unspecified::Bool(v);
             }
 
-            ORD_TEXT => {
+            Some(Type::Text) => {
                 let mut v = Text::default();
                 // Pass the header through with ordinal translated to 0
                 // since Text::decode expects ordinal 0.
@@ -429,53 +620,38 @@ impl Decodable for Unspecified {
                 *self = Unspecified::Text(v);
             }
 
-            ORD_LIST => {
-                let count = header.count as usize;
-                let mut items = Vec::with_capacity(count);
-                for _ in 0..count {
-                    if header.format.data_fields > 0 {
-                        // Each item is self-describing (has its own header).
-                        let item_header: DataHeader = reader.read_data()?;
-                        let mut item = Unspecified::Default;
-                        item.decode(reader, Some(item_header))?;
-                        items.push(item);
-                    } else {
-                        // Items are blobs without individual headers.
-                        reader.skip_blob(header.format.blob_size as usize)?;
-                        items.push(Unspecified::Default);
-                    }
-                }
+            Some(Type::List(_)) => {
+                // Outer header has count=1, data_fields=1.
+                // Read the inner header that describes element type + count.
+                let items = decode_unspecified_list(reader)?;
                 *self = Unspecified::List(items);
             }
 
-            ORD_MAP => {
-                // Read two sub-lists (keys, values).
-                let mut keys = Unspecified::Default;
-                let keys_header: DataHeader = reader.read_data()?;
-                keys.decode(reader, Some(keys_header))?;
+            Some(Type::Map(_)) => {
+                // Two data fields: keys list, values list.
+                let keys_vec = decode_unspecified_list(reader)?;
+                let values_vec = decode_unspecified_list(reader)?;
 
-                let mut values = Unspecified::Default;
-                let values_header: DataHeader = reader.read_data()?;
-                values.decode(reader, Some(values_header))?;
-
-                // Extract the Vec from the decoded lists.
-                let keys_vec = match keys {
-                    Unspecified::List(v) => v,
-                    _ => Vec::new(),
-                };
-                let values_vec = match values {
-                    Unspecified::List(v) => v,
-                    _ => Vec::new(),
-                };
-
-                *self = Unspecified::Map {
-                    keys: keys_vec,
-                    values: values_vec,
-                };
+                // Build BTreeMap, validating that all keys are Text.
+                let mut map = BTreeMap::new();
+                for (key, value) in keys_vec.into_iter().zip(values_vec) {
+                    match key {
+                        Unspecified::Text(t) => {
+                            map.insert(t, value);
+                        }
+                        other => {
+                            return Err(CodecError::UnsupportedUnspecifiedMapKey {
+                                ordinal: other.type_ordinal(),
+                            })
+                        }
+                    }
+                }
+                *self = Unspecified::Map(map);
             }
 
-            // User-defined type — opaque capture.
-            ordinal => {
+            // Decode unknown ordinals as opaque data.
+            _ => {
+                let ordinal = header.format.ordinal;
                 if header.count != 1 {
                     return Err(CodecError::UnsupportedCount {
                         ordinal,
@@ -540,13 +716,13 @@ impl serde::Serialize for Unspecified {
                 }
                 seq.end()
             }
-            Unspecified::Map { keys, values } => {
+            Unspecified::Map(map) => {
                 use serde::ser::SerializeMap;
-                let mut map = serializer.serialize_map(Some(keys.len()))?;
-                for (key, value) in keys.iter().zip(values.iter()) {
-                    map.serialize_entry(key, value)?;
+                let mut m = serializer.serialize_map(Some(map.len()))?;
+                for (key, value) in map {
+                    m.serialize_entry(key, value)?;
                 }
-                map.end()
+                m.end()
             }
             Unspecified::Data { .. } => {
                 // Typed data doesn't have a meaningful JSON representation;
@@ -658,13 +834,11 @@ impl<'de> serde::de::Visitor<'de> for UnspecifiedVisitor {
     }
 
     fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut keys = Vec::new();
-        let mut values = Vec::new();
-        while let Some((key, value)) = map.next_entry::<Unspecified, Unspecified>()? {
-            keys.push(key);
-            values.push(value);
+        let mut result = BTreeMap::new();
+        while let Some((key, value)) = map.next_entry::<Text, Unspecified>()? {
+            result.insert(key, value);
         }
-        Ok(Unspecified::Map { keys, values })
+        Ok(Unspecified::Map(result))
     }
 }
 
@@ -713,7 +887,7 @@ mod tests {
     }
 
     #[test]
-    pub fn list_round_trips() -> Result<(), CodecError> {
+    pub fn heterogeneous_list_round_trips() -> Result<(), CodecError> {
         let original = Unspecified::List(alloc::vec![
             Unspecified::I32(1),
             Unspecified::Text("two".into()),
@@ -732,11 +906,52 @@ mod tests {
     }
 
     #[test]
+    pub fn homogeneous_list_round_trips() -> Result<(), CodecError> {
+        // Homogeneous scalar list (all U32).
+        let original = Unspecified::List(alloc::vec![
+            Unspecified::U32(10),
+            Unspecified::U32(20),
+            Unspecified::U32(30),
+        ]);
+
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&original)?;
+
+        // Verify compact encoding: outer(8) + inner(8) + 3*4 = 28 bytes.
+        assert_eq!(
+            28,
+            bytes.len(),
+            "homogeneous U32 list should be compactly encoded"
+        );
+
+        let mut decoded = Unspecified::Default;
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+
+        assert_eq!(original, decoded);
+
+        // Homogeneous text list.
+        let original = Unspecified::List(alloc::vec![
+            Unspecified::Text("hello".into()),
+            Unspecified::Text("world".into()),
+        ]);
+
+        let mut bytes = alloc::vec![];
+        bytes.write_data(&original)?;
+
+        let mut decoded = Unspecified::Default;
+        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
+
+        assert_eq!(original, decoded);
+
+        Ok(())
+    }
+
+    #[test]
     pub fn map_round_trips() -> Result<(), CodecError> {
-        let original = Unspecified::Map {
-            keys: alloc::vec![Unspecified::Text("a".into()), Unspecified::Text("b".into()),],
-            values: alloc::vec![Unspecified::I32(1), Unspecified::Bool(true)],
-        };
+        let mut map = BTreeMap::new();
+        map.insert(Text::from("a"), Unspecified::I32(1));
+        map.insert(Text::from("b"), Unspecified::Bool(true));
+        let original = Unspecified::Map(map);
 
         let mut bytes = alloc::vec![];
         bytes.write_data(&original)?;
