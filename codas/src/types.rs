@@ -430,7 +430,11 @@ impl Encodable for Type {
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
         let format = match self {
-            Type::Data(..) | Type::List(_) | Type::Map(_) => Format::data(self.ordinal())
+            Type::Map(_) => Format::data(self.ordinal())
+                .with(Type::FORMAT)
+                .with(Type::FORMAT)
+                .as_data_format(),
+            Type::Data(..) | Type::List(_) => Format::data(self.ordinal())
                 .with(Type::FORMAT)
                 .as_data_format(),
             _ => Format::data(self.ordinal()).as_data_format(),
@@ -653,6 +657,14 @@ where
         }
 
         if h.count == 0 {
+            // For None, the format must be zeroed (no payload).
+            if h.format != DataFormat::default() {
+                return UnexpectedDataFormatSnafu {
+                    expected: Self::FORMAT,
+                    actual: Some(h),
+                }
+                .fail();
+            }
             *self = None;
         } else {
             let mut value = T::default();

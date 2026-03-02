@@ -647,8 +647,11 @@ impl Decodable for Unspecified {
             }
 
             Some(Type::List(_)) => {
-                // Validate outer header: List is always count=1, data_fields=1.
-                if header.count != 1 || header.format.data_fields != 1 {
+                // Validate outer header: List is always count=1, blob_size=0, data_fields=1.
+                if header.count != 1
+                    || header.format.blob_size != 0
+                    || header.format.data_fields != 1
+                {
                     return UnexpectedDataFormatSnafu {
                         expected: Format::data(243).with(Format::Fluid),
                         actual: Some(header),
@@ -660,8 +663,11 @@ impl Decodable for Unspecified {
             }
 
             Some(Type::Map(_)) => {
-                // Validate outer header: Map is always count=1, data_fields=2.
-                if header.count != 1 || header.format.data_fields != 2 {
+                // Validate outer header: Map is always count=1, blob_size=0, data_fields=2.
+                if header.count != 1
+                    || header.format.blob_size != 0
+                    || header.format.data_fields != 2
+                {
                     return UnexpectedDataFormatSnafu {
                         expected: Format::data(242).with(Format::Fluid).with(Format::Fluid),
                         actual: Some(header),

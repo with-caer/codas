@@ -36,7 +36,7 @@ where
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let header = Self::ensure_header(header, &[0])?;
+        let _ = Self::ensure_header(header, &[0])?;
 
         // Reset the map.
         self.clear();
@@ -49,7 +49,7 @@ where
         if keys.len() != values.len() {
             return UnexpectedDataFormatSnafu {
                 expected: Self::FORMAT,
-                actual: Some(header),
+                actual: None,
             }
             .fail();
         }
