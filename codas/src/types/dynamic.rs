@@ -406,6 +406,19 @@ fn decode_unspecified_list(
         }
         Some(Type::Unspecified) if inner.format.data_fields == 0 => {}
 
+        // Structured ordinals (Text, List, Map) require at least one
+        // data field when count > 0. Reject malformed headers like
+        // ordinal=Text with data_fields=0 to avoid decoding
+        // self-describing elements from blob-only payload.
+        Some(Type::Text | Type::List(_) | Type::Map(_))
+            if inner.format.data_fields == 0 && count > 0 =>
+        {
+            return UnsupportedDataFormatSnafu {
+                ordinal: inner.format.ordinal,
+            }
+            .fail();
+        }
+
         // Homogeneous scalar types (blob, no per-element header).
         Some(Type::U8) => {
             for _ in 0..count {
@@ -634,13 +647,27 @@ impl Decodable for Unspecified {
             }
 
             Some(Type::List(_)) => {
-                // Outer header has count=1, data_fields=1.
-                // Read the inner header that describes element type + count.
+                // Validate outer header: List is always count=1, data_fields=1.
+                if header.count != 1 || header.format.data_fields != 1 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Format::data(243).with(Format::Fluid),
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let items = decode_unspecified_list(reader)?;
                 *self = Unspecified::List(items);
             }
 
             Some(Type::Map(_)) => {
+                // Validate outer header: Map is always count=1, data_fields=2.
+                if header.count != 1 || header.format.data_fields != 2 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Format::data(242).with(Format::Fluid).with(Format::Fluid),
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 // Two data fields: keys list, values list.
                 let keys_vec = decode_unspecified_list(reader)?;
                 let values_vec = decode_unspecified_list(reader)?;

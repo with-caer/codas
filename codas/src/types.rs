@@ -454,6 +454,15 @@ impl Decodable for Type {
             .build()
         })?;
 
+        // Type is always encoded with count=1.
+        if header.count != 1 {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(header),
+            }
+            .fail();
+        }
+
         match Type::from_ordinal(header.format.ordinal) {
             Some(Type::List(_)) => {
                 let mut typing = Type::default();
@@ -633,6 +642,15 @@ where
             }
             .build()
         })?;
+
+        // Option is always count=0 (None) or count=1 (Some).
+        if h.count > 1 {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(h),
+            }
+            .fail();
+        }
 
         if h.count == 0 {
             *self = None;

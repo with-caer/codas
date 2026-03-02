@@ -343,8 +343,16 @@ impl ReadsDecodable for LimitedReader<'_> {
         if self.bytes_read + buf.len() as u64 > self.max_bytes {
             return Err(CodecError::ByteLimitExceeded);
         }
-        self.reader.read_exact(buf)?;
-        self.bytes_read += buf.len() as u64;
+        // Loop over self.read() so bytes_read is updated incrementally.
+        // This keeps accounting correct even if a partial read errors.
+        let mut filled = 0;
+        while filled < buf.len() {
+            match self.read(&mut buf[filled..]) {
+                Ok(0) => return Err(CodecError::UnexpectedEof),
+                Ok(n) => filled += n,
+                Err(e) => return Err(e),
+            }
+        }
         Ok(())
     }
 

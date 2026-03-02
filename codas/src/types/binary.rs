@@ -23,7 +23,8 @@ use snafu::Snafu;
 
 use crate::{
     codec::{
-        CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable, WritesEncodable,
+        CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+        UnexpectedDataFormatSnafu, WritesEncodable,
     },
     types::Text,
 };
@@ -52,7 +53,19 @@ impl<const SIZE: usize> Decodable for [u8; SIZE] {
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let _ = Self::ensure_header(header, &[0])?;
+        let header = Self::ensure_header(header, &[0])?;
+
+        if header.count != 1
+            || header.format.blob_size != SIZE as u16
+            || header.format.data_fields != 0
+        {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(header),
+            }
+            .fail();
+        }
+
         reader.read_exact(self)?;
         Ok(())
     }
