@@ -469,11 +469,27 @@ impl Decodable for Type {
 
         match Type::from_ordinal(header.format.ordinal) {
             Some(Type::List(_)) => {
+                // List: blob_size=0, data_fields=1 (inner Type).
+                if header.format.blob_size != 0 || header.format.data_fields != 1 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let mut typing = Type::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::List(typing.into());
             }
             Some(Type::Map(_)) => {
+                // Map: blob_size=0, data_fields=2 (key Type + value Type).
+                if header.format.blob_size != 0 || header.format.data_fields != 2 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let mut key_typing = Type::default();
                 reader.read_data_into(&mut key_typing)?;
                 let mut value_typing = Type::default();
@@ -481,10 +497,26 @@ impl Decodable for Type {
                 *self = Type::Map((key_typing, value_typing).into());
             }
             Some(simple) => {
+                // Scalars: blob_size=0, data_fields=0 (no payload).
+                if header.format.blob_size != 0 || header.format.data_fields != 0 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 *self = simple;
             }
             // Any unknown ordinal is a data type descriptor.
             None => {
+                // Data: blob_size=0, data_fields=1 (inner DataType).
+                if header.format.blob_size != 0 || header.format.data_fields != 1 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let mut typing = DataType::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::Data(typing);
@@ -667,6 +699,14 @@ where
             }
             *self = None;
         } else {
+            // For Some, the format must match the Option wrapper format.
+            if h.format != Self::FORMAT.as_data_format() {
+                return UnexpectedDataFormatSnafu {
+                    expected: Self::FORMAT,
+                    actual: Some(h),
+                }
+                .fail();
+            }
             let mut value = T::default();
             reader.read_data_into(&mut value)?;
             *self = Some(value);
