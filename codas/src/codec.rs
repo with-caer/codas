@@ -486,25 +486,14 @@ impl Decodable for DataHeader {
     ) -> Result<(), CodecError> {
         Self::ensure_no_header(header)?;
 
-        // count: u32 LE (4 bytes)
-        let mut count_bytes = [0u8; 4];
-        reader.read_exact(&mut count_bytes)?;
-        self.count = u32::from_le_bytes(count_bytes);
+        // Read all 8 bytes at once: count(4) + blob_size(2) + data_fields(1) + ordinal(1)
+        let mut buf = [0u8; 8];
+        reader.read_exact(&mut buf)?;
 
-        // blob_size: u16 LE (2 bytes)
-        let mut blob_bytes = [0u8; 2];
-        reader.read_exact(&mut blob_bytes)?;
-        self.format.blob_size = u16::from_le_bytes(blob_bytes);
-
-        // data_fields: u8 (1 byte)
-        let mut df_byte = [0u8; 1];
-        reader.read_exact(&mut df_byte)?;
-        self.format.data_fields = df_byte[0];
-
-        // ordinal: u8 (1 byte)
-        let mut ordinal_byte = [0u8; 1];
-        reader.read_exact(&mut ordinal_byte)?;
-        self.format.ordinal = ordinal_byte[0];
+        self.count = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
+        self.format.blob_size = u16::from_le_bytes([buf[4], buf[5]]);
+        self.format.data_fields = buf[6];
+        self.format.ordinal = buf[7];
 
         Ok(())
     }

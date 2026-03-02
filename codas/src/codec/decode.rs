@@ -275,20 +275,20 @@ impl<R: Reads> ReadsDecodable for R {
 /// # }
 /// ```
 ///
-/// Limits are cumulative within the `LimitedReader`'s lifetime: Every
+/// Limits are cumulative within the `LimitedReader`'s lifetime: every
 /// sub-field's bytes and nesting depth count against the same instance.
-pub struct LimitedReader<'a> {
-    reader: &'a mut dyn Reads,
+pub struct LimitedReader<'a, R: Reads> {
+    reader: &'a mut R,
     bytes_read: u64,
     max_bytes: u64,
     depth: u32,
     max_depth: u32,
 }
 
-impl<'a> LimitedReader<'a> {
+impl<'a, R: Reads> LimitedReader<'a, R> {
     /// Creates a new `LimitedReader` with default limits
     /// ([`DEFAULT_MAX_BYTES`] and [`DEFAULT_MAX_DEPTH`]).
-    pub fn new<R: Reads>(reader: &'a mut R) -> Self {
+    pub fn new(reader: &'a mut R) -> Self {
         Self {
             reader,
             bytes_read: 0,
@@ -299,7 +299,7 @@ impl<'a> LimitedReader<'a> {
     }
 
     /// Creates a new `LimitedReader` with no effective limits.
-    pub fn unlimited<R: Reads>(reader: &'a mut R) -> Self {
+    pub fn unlimited(reader: &'a mut R) -> Self {
         Self {
             reader,
             bytes_read: 0,
@@ -327,7 +327,7 @@ impl<'a> LimitedReader<'a> {
     }
 }
 
-impl ReadsDecodable for LimitedReader<'_> {
+impl<R: Reads> ReadsDecodable for LimitedReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, CodecError> {
         let remaining = self.max_bytes.saturating_sub(self.bytes_read) as usize;
         if remaining == 0 && !buf.is_empty() {
@@ -340,19 +340,12 @@ impl ReadsDecodable for LimitedReader<'_> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), CodecError> {
-        if self.bytes_read + buf.len() as u64 > self.max_bytes {
+        let len = buf.len() as u64;
+        if self.bytes_read + len > self.max_bytes {
             return Err(CodecError::ByteLimitExceeded);
         }
-        // Loop over self.read() so bytes_read is updated incrementally.
-        // This keeps accounting correct even if a partial read errors.
-        let mut filled = 0;
-        while filled < buf.len() {
-            match self.read(&mut buf[filled..]) {
-                Ok(0) => return Err(CodecError::UnexpectedEof),
-                Ok(n) => filled += n,
-                Err(e) => return Err(e),
-            }
-        }
+        self.reader.read_exact(buf)?;
+        self.bytes_read += len;
         Ok(())
     }
 
