@@ -179,7 +179,13 @@ impl Format {
     pub const fn with(self, other: Self) -> Self {
         match (self, other) {
             // Adding blobs together yields a bigger blob.
-            (Format::Blob(f1), Format::Blob(f2)) => Self::Blob(f1 + f2),
+            (Format::Blob(f1), Format::Blob(f2)) => {
+                assert!(
+                    f1 as u32 + f2 as u32 <= u16::MAX as u32,
+                    "blob size overflow in Format::with"
+                );
+                Self::Blob(f1 + f2)
+            }
 
             // Adding data to a blob yields data containing
             // the blob and a single data field.
@@ -194,16 +200,26 @@ impl Format {
 
             // Adding blobs to data yields the same data,
             // with a bigger blob.
-            (Format::Data(format), Format::Blob(size)) => DataFormat {
-                blob_size: format.blob_size + size,
-                data_fields: format.data_fields,
-                ordinal: format.ordinal,
+            (Format::Data(format), Format::Blob(size)) => {
+                assert!(
+                    format.blob_size as u32 + size as u32 <= u16::MAX as u32,
+                    "blob size overflow in Format::with"
+                );
+                DataFormat {
+                    blob_size: format.blob_size + size,
+                    data_fields: format.data_fields,
+                    ordinal: format.ordinal,
+                }
+                .as_format()
             }
-            .as_format(),
 
             // Adding data to data yields the same data,
             // with more data fields.
             (Format::Data(format), Format::Data(_)) | (Format::Data(format), Format::Fluid) => {
+                assert!(
+                    (format.data_fields as u16) < u8::MAX as u16,
+                    "data fields overflow in Format::with"
+                );
                 DataFormat {
                     blob_size: format.blob_size,
                     data_fields: format.data_fields + 1,

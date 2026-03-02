@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::codec::{
     self, CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
-    UnexpectedDataFormatSnafu, WritesEncodable,
+    UnexpectedDataFormatSnafu, UnsupportedDataFormatSnafu, WritesEncodable,
 };
 
 use super::{Text, Type};
@@ -91,10 +91,6 @@ impl Unspecified {
     /// Returns the shared type ordinal if all items have the
     /// same [`type_ordinal`](Self::type_ordinal), or `None`
     /// for empty or heterogeneous lists.
-    ///
-    /// Uses cheap `u8` ordinal comparison instead of full
-    /// [`Type`] equality, avoiding heap allocations for
-    /// `List`/`Map` variants.
     fn homogeneous_ordinal(items: &[Unspecified]) -> Option<u8> {
         let first = items.first()?;
         let ordinal = first.type_ordinal();
@@ -136,6 +132,11 @@ impl Unspecified {
     /// Returns the type-tag ordinal for this value.
     fn type_ordinal(&self) -> u8 {
         match self {
+            // We return these types manually to avoid an unnecessary
+            // heap allocation when delegating to self.as_type().
+            Unspecified::Text(_) => 244,
+            Unspecified::List(_) => 243,
+            Unspecified::Map(_) => 242,
             // Data preserves the original wire ordinal.
             Unspecified::Data { header, .. } => header.format.ordinal,
             // All other variants delegate to their Type's ordinal.
@@ -273,6 +274,11 @@ fn encode_unspecified_list(
 ) -> Result<(), CodecError> {
     let count = codec::try_count(items.len())?;
 
+    // Reject lists containing Default items — they carry no data.
+    if items.iter().any(|i| matches!(i, Unspecified::Default)) {
+        return UnsupportedDataFormatSnafu { ordinal: 0u8 }.fail();
+    }
+
     match Unspecified::homogeneous_ordinal(items) {
         Some(ordinal) => {
             // All elements share the same type ordinal.
@@ -375,7 +381,9 @@ fn validate_scalar_format(format: DataFormat) -> Result<(), CodecError> {
 ///   decode N self-describing elements.
 /// - Ordinal 0 with `data_fields=1`: heterogeneous, each element
 ///   is fully self-describing.
-/// - Ordinal 0 with `data_fields=0`: empty or all-Default.
+/// - Ordinal 0 with `data_fields=0` and `count=0`: empty list.
+///   Non-zero counts with this format are rejected (lists of
+///   typeless defaults carry no useful data).
 fn decode_unspecified_list(
     reader: &mut (impl ReadsDecodable + ?Sized),
 ) -> Result<Vec<Unspecified>, CodecError> {
@@ -387,10 +395,16 @@ fn decode_unspecified_list(
     let mut items = Vec::with_capacity(count.min(1024));
 
     match Type::from_ordinal(inner.format.ordinal) {
-        // Default list with no data fields: materialize count defaults.
-        Some(Type::Unspecified) if inner.format.data_fields == 0 => {
-            items.resize(count, Unspecified::Default);
+        // Ordinal 0 with no data fields: only valid as an empty list.
+        // Non-zero counts are rejected to avoid materializing unbounded
+        // typeless defaults from a single header.
+        Some(Type::Unspecified) if inner.format.data_fields == 0 && count > 0 => {
+            return UnsupportedDataFormatSnafu {
+                ordinal: inner.format.ordinal,
+            }
+            .fail();
         }
+        Some(Type::Unspecified) if inner.format.data_fields == 0 => {}
 
         // Homogeneous scalar types (blob, no per-element header).
         Some(Type::U8) => {
@@ -998,22 +1012,19 @@ mod tests {
     }
 
     #[test]
-    pub fn list_with_default_round_trips() -> Result<(), CodecError> {
-        let original = Unspecified::List(alloc::vec![
+    pub fn list_with_default_rejects() {
+        let with_defaults = Unspecified::List(alloc::vec![
             Unspecified::Default,
             Unspecified::I32(42),
             Unspecified::Default,
         ]);
 
         let mut bytes = alloc::vec![];
-        bytes.write_data(&original)?;
-
-        let mut decoded = Unspecified::Default;
-        (&mut bytes.as_slice()).read_data_into(&mut decoded)?;
-
-        assert_eq!(original, decoded);
-
-        Ok(())
+        let result = bytes.write_data(&with_defaults);
+        assert!(
+            result.is_err(),
+            "lists containing Default should be rejected"
+        );
     }
 
     #[test]

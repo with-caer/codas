@@ -251,7 +251,7 @@ impl<R: Reads> ReadsDecodable for R {
 /// A [`Reads`] wrapper that enforces byte and depth limits
 /// during decoding, protecting against malicious or malformed input.
 ///
-/// The blanked [`ReadsDecodable`] implement automatically wraps
+/// The blanket [`ReadsDecodable`] implementation automatically wraps
 /// each top-level decode in a limited reader with default limits.
 /// Construct a `LimitedReader` explicitly to override the defaults:
 ///
