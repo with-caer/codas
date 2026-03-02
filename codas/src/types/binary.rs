@@ -23,8 +23,8 @@ use snafu::Snafu;
 
 use crate::{
     codec::{
-        CodecError, DataHeader, Decodable, Encodable, Format, FormatMetadata, ReadsDecodable,
-        WritesEncodable,
+        CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+        UnexpectedDataFormatSnafu, WritesEncodable,
     },
     types::Text,
 };
@@ -33,7 +33,13 @@ use crate::{
 impl<const SIZE: usize> Encodable for [u8; SIZE] {
     /// Encoded as a [`Format::Data`] containing a
     /// [`Format::Blob(SIZE)`](Format::Blob).
-    const FORMAT: Format = Format::data(0).with(Format::Blob(SIZE as FormatMetadata));
+    const FORMAT: Format = {
+        assert!(
+            SIZE <= u16::MAX as usize,
+            "SIZE exceeds maximum blob size (u16::MAX)"
+        );
+        Format::data(0).with(Format::Blob(SIZE as u16))
+    };
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
         writer.write_all(self)?;
@@ -47,7 +53,19 @@ impl<const SIZE: usize> Decodable for [u8; SIZE] {
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let _ = Self::ensure_header(header, &[0])?;
+        let header = Self::ensure_header(header, &[0])?;
+
+        if header.count != 1
+            || header.format.blob_size != SIZE as u16
+            || header.format.data_fields != 0
+        {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(header),
+            }
+            .fail();
+        }
+
         reader.read_exact(self)?;
         Ok(())
     }

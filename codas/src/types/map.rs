@@ -2,7 +2,8 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::codec::{
-    CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable, WritesEncodable,
+    CodecError, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    UnexpectedDataFormatSnafu, WritesEncodable,
 };
 
 impl<K, V> Encodable for BTreeMap<K, V>
@@ -44,7 +45,14 @@ where
         let keys: Vec<K> = reader.read_data()?;
         let values: Vec<V> = reader.read_data()?;
 
-        // TODO: Check lengths.
+        // Reject mismatched lengths to avoid silent data loss from zip().
+        if keys.len() != values.len() {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: None,
+            }
+            .fail();
+        }
 
         // Insert (key, value) pairs.
         for (key, value) in keys.into_iter().zip(values.into_iter()) {

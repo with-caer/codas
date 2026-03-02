@@ -122,9 +122,9 @@ CREATE TYPE MyNestedDataType AS STRUCT (
 -- Data 2.
 CREATE TYPE MyDataType AS STRUCT (
   "integral_field" INTEGER,
-  "optional_field" UBIGINT,
   "textual_field" VARCHAR,
   "nested_field" MyNestedDataType,
+  "optional_field" UBIGINT,
   "3d_field" INTEGER[][][],
   "map_field" MAP(VARCHAR, INTEGER),
   "unspecified_field" BLOB

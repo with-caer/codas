@@ -95,13 +95,13 @@ pub fn unspecified_map_via_rust() {
         Some(&Unspecified::Bool(true))
     );
 
-    // None represents absent data.
+    // Default represents the null/default value.
     example
         .request_data
-        .insert("empty".into(), Unspecified::None);
+        .insert("empty".into(), Unspecified::Default);
     assert_eq!(
         example.request_data.get(&Text::from("empty")),
-        Some(&Unspecified::None)
+        Some(&Unspecified::Default)
     );
 
     // Wrap in the coda enum.
@@ -119,7 +119,7 @@ pub fn unspecified_map_via_json() {
         .insert("user".into(), Unspecified::Text("alice".into()));
     example
         .request_data
-        .insert("age".into(), Unspecified::U64(30));
+        .insert("age".into(), Unspecified::I64(30));
     example
         .request_data
         .insert("active".into(), Unspecified::Bool(true));
@@ -181,7 +181,7 @@ pub fn unspecified_map_from_arbitrary_json() {
     // Nested array — deserialized as Unspecified::List.
     let tags = example.request_data.get(&Text::from("tags"));
     assert!(
-        matches!(tags, Some(Unspecified::List(..))),
+        matches!(tags, Some(Unspecified::List(_))),
         "expected List, got {tags:?}"
     );
 

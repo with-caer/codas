@@ -1,12 +1,9 @@
 //! Codec decoder implementations.
 use snafu::ensure;
 
-use crate::{codec::UnsupportedDataFormatSnafu, stream::Reads};
+use crate::stream::Reads;
 
-use super::{
-    encode::Encodable, CodecError, DataFormat, DataHeader, FormatMetadata,
-    UnexpectedDataFormatSnafu,
-};
+use super::{encode::Encodable, CodecError, DataFormat, DataHeader, UnexpectedDataFormatSnafu};
 
 /// Default size used for temporary,
 /// stack-allocated buffers.
@@ -37,8 +34,10 @@ pub trait Decodable: Encodable {
     #[inline(always)]
     fn ensure_header(
         header: Option<DataHeader>,
-        supported_ordinals: &[FormatMetadata],
+        supported_ordinals: &[u8],
     ) -> Result<DataHeader, CodecError> {
+        use super::UnsupportedDataFormatSnafu;
+
         // Extract header data.
         let header = header.ok_or_else(|| {
             UnexpectedDataFormatSnafu {
@@ -74,11 +73,41 @@ pub trait Decodable: Encodable {
     }
 }
 
-/// A thing that [`Reads`] [`Decodable`] data.
+/// A thing that reads [`Decodable`] data.
 ///
-/// This trait is automatically implemented for
-/// any type that [`Reads`].
-pub trait ReadsDecodable: Reads {
+/// This trait is automatically implemented for all [`Reads`].
+/// This automatic implementation wraps each top-level decoder in
+/// a [`LimitedReader`] with default limits of [`DEFAULT_MAX_BYTES`]
+/// and [`DEFAULT_MAX_DEPTH`].
+///
+/// For custom limits, construct a [`LimitedReader`] explicitly
+/// instead of using this trait's blanket implementation.
+pub trait ReadsDecodable {
+    /// Reads bytes into `buf`, returning the number
+    /// of bytes read.
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, CodecError>;
+
+    /// Reads _exactly_ `buf.len()` bytes into `buf`.
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), CodecError> {
+        let mut read = 0;
+        while read < buf.len() {
+            let n = self.read(&mut buf[read..])?;
+            if n == 0 {
+                return Err(CodecError::UnexpectedEof);
+            }
+            read += n;
+        }
+        Ok(())
+    }
+
+    /// Called when entering a nested data scope during decoding.
+    fn enter_scope(&mut self) -> Result<(), CodecError> {
+        Ok(())
+    }
+
+    /// Called when exiting a nested data scope during decoding.
+    fn exit_scope(&mut self) {}
+
     /// Reads and decodes a sequence of data into
     /// a new, default instance of `T`.
     ///
@@ -96,8 +125,9 @@ pub trait ReadsDecodable: Reads {
     /// if the `data`'s [`Format::is_structured`](crate::codec::Format::is_structured).
     fn read_data_into<T: Decodable>(&mut self, data: &mut T) -> Result<(), CodecError> {
         if T::FORMAT.is_structured() {
-            let header = self.read_data()?;
-            data.decode(self, Some(header))?;
+            let mut guard = DecodingScope::enter(self)?;
+            let header: DataHeader = guard.read_data()?;
+            data.decode(&mut *guard, Some(header))?;
         } else {
             data.decode(self, None)?;
         }
@@ -111,11 +141,15 @@ pub trait ReadsDecodable: Reads {
         let mut buf = [0; TEMP_BUFFER_SIZE];
         while skipped < length {
             let remaining = length - skipped;
-            if remaining < TEMP_BUFFER_SIZE {
-                skipped += self.read(&mut buf[..remaining])?;
+            let n = if remaining < TEMP_BUFFER_SIZE {
+                self.read(&mut buf[..remaining])?
             } else {
-                skipped += self.read(&mut buf)?;
+                self.read(&mut buf)?
+            };
+            if n == 0 {
+                return Err(CodecError::UnexpectedEof);
             }
+            skipped += n;
         }
         Ok(())
     }
@@ -123,17 +157,18 @@ pub trait ReadsDecodable: Reads {
     /// Skips to the end of the next encoded sequence of data,
     /// returning the total number of bytes skipped.
     fn skip_data(&mut self) -> Result<usize, CodecError> {
+        let mut guard = DecodingScope::enter(self)?;
         let mut read = 0;
 
         // Decode data header.
-        let header: DataHeader = self.read_data()?;
+        let header: DataHeader = guard.read_data()?;
         read += DataHeader::FORMAT.as_data_format().blob_size as usize;
         let data_format = header.format;
 
         // Decode all data in the sequence, skipping
         // their blobs and recursively skipping data fields.
         for _ in 0..header.count {
-            read += self.skip_data_with_format(data_format)?;
+            read += guard.skip_data_with_format(data_format)?;
         }
 
         Ok(read)
@@ -158,7 +193,187 @@ pub trait ReadsDecodable: Reads {
     }
 }
 
-impl<T: Reads + ?Sized> ReadsDecodable for T {}
+/// RAII guard around a [`ReadsDecodable`] that calls
+/// [`ReadsDecodable::exit_scope`] on drop.
+///
+/// Created via [`DecodingScope::enter`], which calls
+/// [`enter_scope`](ReadsDecodable::enter_scope) on construction.
+pub(crate) struct DecodingScope<'a, R: ReadsDecodable + ?Sized> {
+    reader: &'a mut R,
+}
+
+impl<'a, R: ReadsDecodable + ?Sized> DecodingScope<'a, R> {
+    /// Enters a scope on `reader` and returns a guard
+    /// that exits the scope when dropped.
+    pub(crate) fn enter(reader: &'a mut R) -> Result<Self, CodecError> {
+        reader.enter_scope()?;
+        Ok(Self { reader })
+    }
+}
+
+impl<R: ReadsDecodable + ?Sized> Drop for DecodingScope<'_, R> {
+    fn drop(&mut self) {
+        self.reader.exit_scope();
+    }
+}
+
+impl<R: ReadsDecodable + ?Sized> core::ops::Deref for DecodingScope<'_, R> {
+    type Target = R;
+    fn deref(&self) -> &R {
+        self.reader
+    }
+}
+
+impl<R: ReadsDecodable + ?Sized> core::ops::DerefMut for DecodingScope<'_, R> {
+    fn deref_mut(&mut self) -> &mut R {
+        self.reader
+    }
+}
+
+impl<R: Reads> ReadsDecodable for R {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, CodecError> {
+        Ok(Reads::read(self, buf)?)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), CodecError> {
+        Ok(Reads::read_exact(self, buf)?)
+    }
+
+    fn read_data_into<T: Decodable>(&mut self, data: &mut T) -> Result<(), CodecError> {
+        LimitedReader::new(&mut *self).read_data_into(data)
+    }
+
+    fn skip_data(&mut self) -> Result<usize, CodecError> {
+        LimitedReader::new(&mut *self).skip_data()
+    }
+}
+
+/// A [`Reads`] wrapper that enforces byte and depth limits
+/// during decoding, protecting against malicious or malformed input.
+///
+/// The blanket [`ReadsDecodable`] implementation automatically wraps
+/// each top-level decode in a limited reader with default limits.
+/// Construct a `LimitedReader` explicitly to override the defaults:
+///
+/// ```
+/// use codas::codec::LimitedReader;
+/// use codas::codec::ReadsDecodable;
+///
+/// # fn example(encoded: &[u8]) -> Result<(), codas::codec::CodecError> {
+/// // Custom limits:
+/// let mut slice = encoded;
+/// let data: u32 = LimitedReader::new(&mut slice)
+///     .max_bytes(1024)
+///     .max_depth(8)
+///     .read_data()?;
+///
+/// // No effective limits (trusted data):
+/// let mut slice = encoded;
+/// let data: u32 = LimitedReader::unlimited(&mut slice)
+///     .read_data()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Limits are cumulative within the `LimitedReader`'s lifetime: Every
+/// sub-field's bytes and nesting depth count against the same instance.
+pub struct LimitedReader<'a> {
+    reader: &'a mut dyn Reads,
+    bytes_read: u64,
+    max_bytes: u64,
+    depth: u32,
+    max_depth: u32,
+}
+
+impl<'a> LimitedReader<'a> {
+    /// Creates a new `LimitedReader` with default limits
+    /// ([`DEFAULT_MAX_BYTES`] and [`DEFAULT_MAX_DEPTH`]).
+    pub fn new<R: Reads>(reader: &'a mut R) -> Self {
+        Self {
+            reader,
+            bytes_read: 0,
+            max_bytes: DEFAULT_MAX_BYTES,
+            depth: 0,
+            max_depth: DEFAULT_MAX_DEPTH,
+        }
+    }
+
+    /// Creates a new `LimitedReader` with no effective limits.
+    pub fn unlimited<R: Reads>(reader: &'a mut R) -> Self {
+        Self {
+            reader,
+            bytes_read: 0,
+            max_bytes: u64::MAX,
+            depth: 0,
+            max_depth: u32::MAX,
+        }
+    }
+
+    /// Sets the maximum number of bytes this reader will read.
+    pub fn max_bytes(mut self, max: u64) -> Self {
+        self.max_bytes = max;
+        self
+    }
+
+    /// Sets the maximum nesting depth this reader will allow.
+    pub fn max_depth(mut self, max: u32) -> Self {
+        self.max_depth = max;
+        self
+    }
+
+    /// Returns the total number of bytes read so far.
+    pub fn bytes_read(&self) -> u64 {
+        self.bytes_read
+    }
+}
+
+impl ReadsDecodable for LimitedReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, CodecError> {
+        let remaining = self.max_bytes.saturating_sub(self.bytes_read) as usize;
+        if remaining == 0 && !buf.is_empty() {
+            return Err(CodecError::ByteLimitExceeded);
+        }
+        let limit = buf.len().min(remaining);
+        let n = self.reader.read(&mut buf[..limit])?;
+        self.bytes_read += n as u64;
+        Ok(n)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), CodecError> {
+        if self.bytes_read + buf.len() as u64 > self.max_bytes {
+            return Err(CodecError::ByteLimitExceeded);
+        }
+        // Loop over self.read() so bytes_read is updated incrementally.
+        // This keeps accounting correct even if a partial read errors.
+        let mut filled = 0;
+        while filled < buf.len() {
+            match self.read(&mut buf[filled..]) {
+                Ok(0) => return Err(CodecError::UnexpectedEof),
+                Ok(n) => filled += n,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
+    fn enter_scope(&mut self) -> Result<(), CodecError> {
+        self.depth += 1;
+        if self.depth > self.max_depth {
+            return Err(CodecError::DepthLimitExceeded);
+        }
+        Ok(())
+    }
+
+    fn exit_scope(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+    }
+}
+
+/// Default maximum bytes a [`LimitedReader`] will read (64 MiB).
+pub const DEFAULT_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Default maximum nesting depth a [`LimitedReader`] will allow.
+pub const DEFAULT_MAX_DEPTH: u32 = 64;
 
 #[cfg(test)]
 mod tests {
@@ -189,6 +404,154 @@ mod tests {
         assert_eq!(TestData::default().text, text);
 
         Ok(())
+    }
+
+    #[test]
+    fn limited_reader_byte_limit() {
+        use crate::codec::WritesEncodable;
+
+        // Encode a Text value (header + bytes).
+        let text = Text::from("hello, limited world!");
+        let mut bytes = vec![];
+        bytes.write_data(&text).unwrap();
+        let total = bytes.len();
+
+        // Decoding with a limit smaller than the payload fails.
+        let mut slice = bytes.as_slice();
+        let result = LimitedReader::new(&mut slice)
+            .max_bytes(8) // only enough for the header
+            .read_data::<Text>();
+        assert!(
+            matches!(result, Err(CodecError::ByteLimitExceeded)),
+            "expected ByteLimitExceeded, got {result:?}"
+        );
+
+        // Decoding with exact limit succeeds.
+        let mut slice = bytes.as_slice();
+        let decoded = LimitedReader::new(&mut slice)
+            .max_bytes(total as u64)
+            .read_data::<Text>()
+            .expect("should decode within exact limit");
+        assert_eq!(text, decoded);
+    }
+
+    #[test]
+    fn limited_reader_depth_limit() {
+        use crate::codec::WritesEncodable;
+
+        // Build a nested structure: Vec<Vec<u32>>.
+        // Nesting: outer header → inner Vec header → u32 blobs.
+        // That's 2 levels of structured data.
+        let data: Vec<Vec<u32>> = vec![vec![1, 2], vec![3, 4]];
+        let mut bytes = vec![];
+        bytes.write_data(&data).unwrap();
+
+        // max_depth=1 should fail (we need at least 2 levels).
+        let mut slice = bytes.as_slice();
+        let result = LimitedReader::new(&mut slice)
+            .max_depth(1)
+            .read_data::<Vec<Vec<u32>>>();
+        assert!(
+            matches!(result, Err(CodecError::DepthLimitExceeded)),
+            "expected DepthLimitExceeded, got {result:?}"
+        );
+
+        // max_depth=2 should succeed.
+        let mut slice = bytes.as_slice();
+        let decoded = LimitedReader::new(&mut slice)
+            .max_depth(2)
+            .read_data::<Vec<Vec<u32>>>()
+            .expect("should decode at depth 2");
+        assert_eq!(data, decoded);
+    }
+
+    #[test]
+    fn limited_reader_cumulative_bytes() {
+        use crate::codec::WritesEncodable;
+
+        // Encode a struct-like payload: two Text fields back-to-back
+        // inside a data header, totaling well over 16 bytes.
+        let text_a = Text::from("hello world!!");
+        let text_b = Text::from("goodbye world!");
+        let mut payload = vec![];
+        payload.write_data(&text_a).unwrap();
+        payload.write_data(&text_b).unwrap();
+        let total = payload.len();
+
+        // A limit that covers the first field but not both should fail
+        // partway through the second field, proving bytes are cumulative.
+        let first_field_size = {
+            let mut tmp = vec![];
+            tmp.write_data(&text_a).unwrap();
+            tmp.len()
+        };
+        let tight_limit = first_field_size as u64 + 4; // enough for first, not second
+
+        let mut slice = payload.as_slice();
+        let mut limited = LimitedReader::new(&mut slice).max_bytes(tight_limit);
+        let _a: Text = limited.read_data().unwrap(); // should succeed
+        let result_b: Result<Text, _> = limited.read_data(); // should fail
+        assert!(
+            matches!(result_b, Err(CodecError::ByteLimitExceeded)),
+            "expected ByteLimitExceeded on second field, got {result_b:?}"
+        );
+
+        // With enough room for both, it succeeds.
+        let mut slice = payload.as_slice();
+        let mut limited = LimitedReader::new(&mut slice).max_bytes(total as u64);
+        let a: Text = limited.read_data().unwrap();
+        let b: Text = limited.read_data().unwrap();
+        assert_eq!(text_a, a);
+        assert_eq!(text_b, b);
+    }
+
+    #[test]
+    fn limited_reader_auto_wrap_succeeds() -> Result<(), CodecError> {
+        use crate::codec::WritesEncodable;
+
+        // Normal decode through the blanket impl (auto-wrapping)
+        // should work for well-formed data under default limits.
+        let data: Vec<Vec<u32>> = vec![vec![1, 2, 3], vec![4, 5]];
+        let mut bytes = vec![];
+        bytes.write_data(&data).unwrap();
+        let decoded: Vec<Vec<u32>> = bytes.as_slice().read_data()?;
+        assert_eq!(data, decoded);
+        Ok(())
+    }
+
+    /// The byte budget must accumulate across all fields within
+    /// a single decode — not reset per field. This test decodes
+    /// a nested structure through a [`LimitedReader`] with a
+    /// tight budget, proving that all sub-field bytes count
+    /// against one shared limit.
+    #[test]
+    fn limited_reader_struct_byte_accumulation() {
+        use crate::codec::WritesEncodable;
+
+        let data: Vec<Vec<u32>> = vec![vec![1, 2], vec![3, 4]];
+        let mut bytes = vec![];
+        bytes.write_data(&data).unwrap();
+        let total = bytes.len();
+
+        // One byte short of the total should fail, proving
+        // the budget is shared across all nested decode calls.
+        let mut slice = bytes.as_slice();
+        let result = LimitedReader::new(&mut slice)
+            .max_bytes(total as u64 - 1)
+            .read_data::<Vec<Vec<u32>>>();
+        assert!(
+            matches!(result, Err(CodecError::ByteLimitExceeded)),
+            "expected ByteLimitExceeded with budget {}, got {result:?}",
+            total - 1,
+        );
+
+        // Exact budget succeeds.
+        let mut slice = bytes.as_slice();
+        let decoded = LimitedReader::new(&mut slice)
+            .max_bytes(total as u64)
+            .read_data::<Vec<Vec<u32>>>()
+            .expect("exact budget should succeed");
+        assert_eq!(data, decoded);
     }
 
     #[test]

@@ -10,7 +10,10 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 
-use crate::codec::{CodecError, DataHeader, Decodable, Encodable, Format, WritesEncodable};
+use crate::codec::{
+    CodecError, DataHeader, Decodable, Encodable, Format, UnexpectedDataFormatSnafu,
+    WritesEncodable,
+};
 
 /// UTF-8 encoded text data.
 ///
@@ -114,6 +117,15 @@ impl Decodable for Text {
     ) -> Result<(), crate::codec::CodecError> {
         let header = Self::ensure_header(header, &[0])?;
 
+        // Text is always blob_size=1, data_fields=0.
+        if header.format.blob_size != 1 || header.format.data_fields != 0 {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(header),
+            }
+            .fail();
+        }
+
         match self {
             Text::Static(_) => {
                 // Reference the empty text for empty strings.
@@ -179,7 +191,7 @@ fn try_decode_string(
         // Read in the raw bytes.
         if let Err(e) = reader.read_exact(bytes) {
             bytes.clear();
-            return Err(e.into());
+            return Err(e);
         }
 
         // Validate the bytes.

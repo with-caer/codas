@@ -12,8 +12,8 @@ use core::convert::Infallible;
 use alloc::{boxed::Box, vec, vec::Vec};
 
 use crate::codec::{
-    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, FormatMetadata,
-    ReadsDecodable, WritesEncodable,
+    CodecError, DataFormat, DataHeader, Decodable, Encodable, Format, ReadsDecodable,
+    UnexpectedDataFormatSnafu, WritesEncodable,
 };
 
 pub mod binary;
@@ -74,6 +74,61 @@ pub enum Type {
 }
 
 impl Type {
+    /// Returns the wire ordinal for this type.
+    ///
+    /// Built-in ordinals count down from `255`, while user-defined
+    /// ordinals count up from `1`. The ordinal at `0` is reserved
+    /// for unspecified data.
+    pub const fn ordinal(&self) -> u8 {
+        match self {
+            Type::Unspecified => 0,
+            Type::U8 => 255,
+            Type::U16 => 254,
+            Type::U32 => 253,
+            Type::U64 => 252,
+            Type::I8 => 251,
+            Type::I16 => 250,
+            Type::I32 => 249,
+            Type::I64 => 248,
+            Type::F32 => 247,
+            Type::F64 => 246,
+            Type::Bool => 245,
+            Type::Text => 244,
+            Type::Data(data) => data.format.as_data_format().ordinal,
+            Type::List(_) => 243,
+            Type::Map(_) => 242,
+        }
+    }
+
+    /// Returns the type corresponding to `ordinal`.
+    ///
+    /// Iff ordinal does not correspond to a built-in-type,
+    /// `None` is returned.
+    ///
+    /// List and Map return placeholder inner types
+    /// ([`Type::Unspecified`]) since the ordinal alone doesn't
+    /// describe the element/key/value types.
+    pub fn from_ordinal(ordinal: u8) -> Option<Self> {
+        match ordinal {
+            0 => Some(Type::Unspecified),
+            255 => Some(Type::U8),
+            254 => Some(Type::U16),
+            253 => Some(Type::U32),
+            252 => Some(Type::U64),
+            251 => Some(Type::I8),
+            250 => Some(Type::I16),
+            249 => Some(Type::I32),
+            248 => Some(Type::I64),
+            247 => Some(Type::F32),
+            246 => Some(Type::F64),
+            245 => Some(Type::Bool),
+            244 => Some(Type::Text),
+            243 => Some(Type::List(Type::Unspecified.into())),
+            242 => Some(Type::Map((Type::Unspecified, Type::Unspecified).into())),
+            _ => None,
+        }
+    }
+
     /// The type's encoding format.
     pub const fn format(&self) -> Format {
         match self {
@@ -96,9 +151,9 @@ impl Type {
             // Maps are formatted as a list of keys
             // followed by a list of values.
             Type::Map(..) => DataFormat {
-                ordinal: 0,
                 blob_size: 0,
                 data_fields: 2,
+                ordinal: 0,
             }
             .as_format(),
         }
@@ -214,7 +269,7 @@ impl DataType {
     pub fn new(
         name: Text,
         docs: Option<Text>,
-        ordinal: FormatMetadata,
+        ordinal: u8,
         blob_fields: &[DataField],
         data_fields: &[DataField],
     ) -> Self {
@@ -269,15 +324,24 @@ impl DataType {
         }
 
         let field_format = field.typing.format();
-        self.format = self.format.with(field_format);
-        match field_format {
-            Format::Blob(..) => {
-                self.blob_fields.push(field);
-            }
-            Format::Data(..) | Format::Fluid => {
-                self.data_fields.push(field);
-            }
-        };
+
+        // Optional fields are wrapped into a data field
+        // so they get a header for presence signaling.
+        if field.optional {
+            let boxed_format = Format::data(0).with(field_format);
+            self.format = self.format.with(boxed_format);
+            self.data_fields.push(field);
+        } else {
+            self.format = self.format.with(field_format);
+            match field_format {
+                Format::Blob(..) => {
+                    self.blob_fields.push(field);
+                }
+                Format::Data(..) | Format::Fluid => {
+                    self.data_fields.push(field);
+                }
+            };
+        }
 
         self
     }
@@ -365,48 +429,18 @@ impl Encodable for Type {
         &self,
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
-        let ordinal = match self {
-            Type::Unspecified => 0u16,
-            Type::U8 => 1u16,
-            Type::U16 => 2u16,
-            Type::U32 => 3u16,
-            Type::U64 => 4u16,
-            Type::I8 => 5u16,
-            Type::I16 => 6u16,
-            Type::I32 => 7u16,
-            Type::I64 => 8u16,
-            Type::F32 => 9u16,
-            Type::F64 => 10u16,
-            Type::Bool => 11u16,
-            Type::Text => 12u16,
-            Type::Data(..) => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(13u16).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
-            Type::List { .. } => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(14u16).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
-            Type::Map { .. } => {
-                return DataHeader {
-                    count: 1,
-                    format: Format::data(15u16).with(Type::FORMAT).as_data_format(),
-                }
-                .encode(writer);
-            }
+        let format = match self {
+            Type::Map(_) => Format::data(self.ordinal())
+                .with(Type::FORMAT)
+                .with(Type::FORMAT)
+                .as_data_format(),
+            Type::Data(..) | Type::List(_) => Format::data(self.ordinal())
+                .with(Type::FORMAT)
+                .as_data_format(),
+            _ => Format::data(self.ordinal()).as_data_format(),
         };
 
-        DataHeader {
-            count: 1,
-            format: Format::data(ordinal).as_data_format(),
-        }
-        .encode(writer)
+        DataHeader { count: 1, format }.encode(writer)
     }
 }
 
@@ -416,73 +450,78 @@ impl Decodable for Type {
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let header = Self::ensure_header(
-            header,
-            &[
-                0u16, 1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16,
-                13u16, 14u16, 15u16,
-            ],
-        )?;
+        let header = header.ok_or_else(|| {
+            UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: None::<DataHeader>,
+            }
+            .build()
+        })?;
 
-        match header.format.ordinal {
-            0u16 => {
-                *self = Type::Unspecified;
+        // Type is always encoded with count=1.
+        if header.count != 1 {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(header),
             }
-            1u16 => {
-                *self = Type::U8;
-            }
-            2u16 => {
-                *self = Type::U16;
-            }
-            3u16 => {
-                *self = Type::U32;
-            }
-            4u16 => {
-                *self = Type::U64;
-            }
-            5u16 => {
-                *self = Type::I8;
-            }
-            6u16 => {
-                *self = Type::I16;
-            }
-            7u16 => {
-                *self = Type::I32;
-            }
-            8u16 => {
-                *self = Type::I64;
-            }
-            9u16 => {
-                *self = Type::F32;
-            }
-            10u16 => {
-                *self = Type::F64;
-            }
-            11u16 => {
-                *self = Type::Bool;
-            }
-            12u16 => {
-                *self = Type::Text;
-            }
-            13u16 => {
-                let mut typing = DataType::default();
-                reader.read_data_into(&mut typing)?;
-                *self = Type::Data(typing);
-            }
-            14u16 => {
+            .fail();
+        }
+
+        match Type::from_ordinal(header.format.ordinal) {
+            Some(Type::List(_)) => {
+                // List: blob_size=0, data_fields=1 (inner Type).
+                if header.format.blob_size != 0 || header.format.data_fields != 1 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let mut typing = Type::default();
                 reader.read_data_into(&mut typing)?;
                 *self = Type::List(typing.into());
             }
-            15u16 => {
+            Some(Type::Map(_)) => {
+                // Map: blob_size=0, data_fields=2 (key Type + value Type).
+                if header.format.blob_size != 0 || header.format.data_fields != 2 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
                 let mut key_typing = Type::default();
                 reader.read_data_into(&mut key_typing)?;
                 let mut value_typing = Type::default();
                 reader.read_data_into(&mut value_typing)?;
                 *self = Type::Map((key_typing, value_typing).into());
             }
-            _ => unreachable!(),
-        };
+            Some(simple) => {
+                // Scalars: blob_size=0, data_fields=0 (no payload).
+                if header.format.blob_size != 0 || header.format.data_fields != 0 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
+                *self = simple;
+            }
+            // Any unknown ordinal is a data type descriptor.
+            None => {
+                // Data: blob_size=0, data_fields=1 (inner DataType).
+                if header.format.blob_size != 0 || header.format.data_fields != 1 {
+                    return UnexpectedDataFormatSnafu {
+                        expected: Self::FORMAT,
+                        actual: Some(header),
+                    }
+                    .fail();
+                }
+                let mut typing = DataType::default();
+                reader.read_data_into(&mut typing)?;
+                *self = Type::Data(typing);
+            }
+        }
 
         Ok(())
     }
@@ -513,7 +552,7 @@ impl Decodable for Coda {
         reader: &mut (impl crate::codec::ReadsDecodable + ?Sized),
         header: Option<crate::codec::DataHeader>,
     ) -> Result<(), crate::codec::CodecError> {
-        let _ = Self::ensure_header(header, &[0u16])?;
+        let _ = Self::ensure_header(header, &[0])?;
 
         reader.read_data_into(&mut self.global_name)?;
         reader.read_data_into(&mut self.local_name)?;
@@ -598,57 +637,79 @@ impl<T> Encodable for Option<T>
 where
     T: Default + Encodable + 'static,
 {
-    /// Options are a semantic feature that's not
-    /// technically encoded: Optional data encodes
-    /// identically to "not optional" data. In the
-    /// case of `None`, data is encoded and decoded
-    /// as its default value.
-    const FORMAT: Format = T::FORMAT;
+    const FORMAT: Format = Format::data(0).with(T::FORMAT);
 
     fn encode(&self, writer: &mut (impl WritesEncodable + ?Sized)) -> Result<(), CodecError> {
-        match &self {
-            Some(value) => {
-                value.encode(writer)?;
-            }
-
-            None => {
-                Self::FORMAT.encode_default_value(writer)?;
-            }
+        match self {
+            None => Ok(()),
+            Some(value) => writer.write_data(value),
         }
-
-        Ok(())
     }
 
     fn encode_header(
         &self,
         writer: &mut (impl WritesEncodable + ?Sized),
     ) -> Result<(), CodecError> {
-        match &self {
-            Some(value) => value.encode_header(writer),
-            None => Self::FORMAT.encode_default_header(writer),
+        DataHeader {
+            count: if self.is_some() { 1 } else { 0 },
+            format: if self.is_some() {
+                Self::FORMAT.as_data_format()
+            } else {
+                DataFormat::default()
+            },
         }
+        .encode(writer)
     }
 }
 
 impl<T> Decodable for Option<T>
 where
-    T: Decodable + Default + PartialEq + 'static,
+    T: Decodable + Default + 'static,
 {
     fn decode(
         &mut self,
         reader: &mut (impl ReadsDecodable + ?Sized),
         header: Option<DataHeader>,
     ) -> Result<(), CodecError> {
-        let mut decoded = T::default();
-        decoded.decode(reader, header)?;
+        let h = header.ok_or_else(|| {
+            UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: None::<DataHeader>,
+            }
+            .build()
+        })?;
 
-        // TODO: It'd be better if we could detect "defaulty-ness"
-        //       during the decoding step, so that we're not having
-        //       to manually compare a decoded value to its default.
-        if decoded == T::default() {
+        // Option is always count=0 (None) or count=1 (Some).
+        if h.count > 1 {
+            return UnexpectedDataFormatSnafu {
+                expected: Self::FORMAT,
+                actual: Some(h),
+            }
+            .fail();
+        }
+
+        if h.count == 0 {
+            // For None, the format must be zeroed (no payload).
+            if h.format != DataFormat::default() {
+                return UnexpectedDataFormatSnafu {
+                    expected: Self::FORMAT,
+                    actual: Some(h),
+                }
+                .fail();
+            }
             *self = None;
         } else {
-            *self = Some(decoded);
+            // For Some, the format must match the Option wrapper format.
+            if h.format != Self::FORMAT.as_data_format() {
+                return UnexpectedDataFormatSnafu {
+                    expected: Self::FORMAT,
+                    actual: Some(h),
+                }
+                .fail();
+            }
+            let mut value = T::default();
+            reader.read_data_into(&mut value)?;
+            *self = Some(value);
         }
 
         Ok(())
@@ -852,12 +913,12 @@ mod tests {
         let decoded_option = data.as_slice().read_data().expect("decoded");
         assert_eq!(option, decoded_option);
 
-        // Do default values decode as None?
+        // Default values round-trip as Some(default).
         let option: Option<u32> = Some(0);
         let mut data = vec![];
         data.write_data(&option).expect("encoded");
         let decoded_option: Option<u32> = data.as_slice().read_data().expect("decoded");
-        assert_eq!(None, decoded_option);
+        assert_eq!(Some(0), decoded_option);
     }
 
     #[test]
@@ -876,11 +937,83 @@ mod tests {
         let decoded_option = data.as_slice().read_data().expect("decoded");
         assert_eq!(option, decoded_option);
 
-        // Do default values decode as None?
+        // Default values round-trip as Some(default).
         let option: Option<Text> = Some("".into());
         let mut data = vec![];
         data.write_data(&option).expect("encoded");
         let decoded_option: Option<Text> = data.as_slice().read_data().expect("decoded");
-        assert_eq!(None, decoded_option);
+        assert_eq!(Some("".into()), decoded_option);
+    }
+
+    #[test]
+    fn codes_nested_optionals() {
+        // None
+        let option: Option<Option<u32>> = None;
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(None)
+        let option: Option<Option<u32>> = Some(None);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(Some(0)) — the previously unrepresentable case
+        let option: Option<Option<u32>> = Some(Some(0));
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(Some(42))
+        let option: Option<Option<u32>> = Some(Some(42));
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Option<u32>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+    }
+
+    #[test]
+    fn codes_optional_vec() {
+        // None
+        let option: Option<Vec<u16>> = None;
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(vec![])
+        let option: Option<Vec<u16>> = Some(vec![]);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+
+        // Some(vec![42])
+        let option: Option<Vec<u16>> = Some(vec![42]);
+        let mut data = vec![];
+        data.write_data(&option).expect("encoded");
+        let decoded: Option<Vec<u16>> = data.as_slice().read_data().expect("decoded");
+        assert_eq!(option, decoded);
+    }
+
+    /// Verifies that `ordinal()` and `from_ordinal()` are consistent:
+    /// for every ordinal 0–255, if `from_ordinal` returns `Some(t)`,
+    /// then `t.ordinal()` equals the original ordinal.
+    #[test]
+    fn ordinal_round_trip() {
+        for ordinal in 0..=255u8 {
+            if let Some(typ) = Type::from_ordinal(ordinal) {
+                assert_eq!(
+                    ordinal,
+                    typ.ordinal(),
+                    "from_ordinal({ordinal}) returned {typ:?} with ordinal {}",
+                    typ.ordinal()
+                );
+            }
+        }
     }
 }
